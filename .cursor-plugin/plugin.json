@@ -1,0 +1,14 @@
+{
+  "name": "viveka",
+  "version": "1.0.0",
+  "description": "Cognitive framework for AI agents. Six-stage reasoning posture: Context, Grasping, Architecture, Execution, Review, Catalogue.",
+  "author": {
+    "name": "Chinmay Bhandari"
+  },
+  "homepage": "https://github.com/Chiinmay/viveka",
+  "license": "MIT",
+  "rules": [
+    "rules/viveka-framework.mdc"
+  ],
+  "skills": "skills"
+}
