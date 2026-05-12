@@ -16,7 +16,7 @@ Usage:
     engine = MicroDecisionEngine(
         environment=env_state,
         context=task_context,
-        risk_mode=RiskMode.BALANCED,
+        risk_mode=RiskMode.STANDARD,
         macro_strategy=selected_option,  # from govern() output
     )
 
@@ -135,7 +135,7 @@ class MicroDecisionEngine:
         self,
         environment: EnvironmentState,
         context: TaskContext,
-        risk_mode: RiskMode = RiskMode.BALANCED,
+        risk_mode: RiskMode = RiskMode.STANDARD,
         macro_strategy: Option | None = None,
     ):
         self.env = environment
@@ -390,7 +390,7 @@ class MicroDecisionEngine:
         ]
 
         if _matches_any(action, destructive_patterns):
-            if self.risk_mode in (RiskMode.CAUTIOUS, RiskMode.LOCKED):
+            if self.risk_mode in (RiskMode.GUARDED, RiskMode.RESTRICTED):
                 return MicroDecision(
                     verdict=Verdict.BLOCK,
                     action=action,
@@ -488,7 +488,7 @@ class MicroDecisionEngine:
 # ──────────────────────────────────────────────
 
 _LIMITS: dict[RiskMode, dict] = {
-    RiskMode.EXPLORE: {
+    RiskMode.PERMISSIVE: {
         "max_retries": 5,
         "max_files_modified": 30,
         "max_unique_tools": 15,
@@ -496,7 +496,7 @@ _LIMITS: dict[RiskMode, dict] = {
         "max_actions": 200,
         "max_undeclared_assumptions": 10,
     },
-    RiskMode.BALANCED: {
+    RiskMode.STANDARD: {
         "max_retries": 3,
         "max_files_modified": 15,
         "max_unique_tools": 10,
@@ -504,7 +504,7 @@ _LIMITS: dict[RiskMode, dict] = {
         "max_actions": 100,
         "max_undeclared_assumptions": 5,
     },
-    RiskMode.CAUTIOUS: {
+    RiskMode.GUARDED: {
         "max_retries": 2,
         "max_files_modified": 8,
         "max_unique_tools": 6,
@@ -512,7 +512,7 @@ _LIMITS: dict[RiskMode, dict] = {
         "max_actions": 50,
         "max_undeclared_assumptions": 2,
     },
-    RiskMode.LOCKED: {
+    RiskMode.RESTRICTED: {
         "max_retries": 1,
         "max_files_modified": 3,
         "max_unique_tools": 3,

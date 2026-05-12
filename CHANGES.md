@@ -1,6 +1,27 @@
 # Viveka — Changes log
 
-## v2.0.0 (current) — Unified product: cognitive + enforcement + tools
+## v2.1.0 (current) — Jargon unification + posture-enforcement bridge
+
+Five internal consistency fixes that resolve conflicts between the cognitive layer and the deterministic runtime.
+
+### Fix 1: Posture → enforcement mode bridge
+Cognitive postures (standard/exploratory/speed/adversarial) now influence the enforcement mode. Adversarial posture nudges toward guarded mode. Exploratory and speed postures nudge toward permissive mode. Standard posture uses the computed mode. Session state tracks both.
+
+### Fix 2: Enforcement modes renamed
+Runtime risk modes renamed to eliminate collision with cognitive postures: explore→permissive, balanced→standard, cautious→guarded, locked→restricted. Postures shape reasoning depth; enforcement modes shape action latitude. Different systems, different names.
+
+### Fix 3: Intent detection from task description
+Session start now parses the task description for intent signals (fix, improvement, exploration, maintenance, recovery) instead of always defaulting to "feature". Pattern-priority order prevents ambiguous matches.
+
+### Fix 4: Unified decision vocabulary
+One vocabulary across all layers — permit/warn/block/escalate. The Transition Protocol in CLAUDE.md, the micro-engine verdicts, the hook responses, and the MCP tool outputs all use the same four terms with the same semantics.
+
+### Fix 5: Cross-referenced memory locations
+`viveka_memory_read` now searches both project-local (.viveka/memory/, .viveka/framework-memory/) and user-global (~/.viveka/traces/, ~/.viveka/policies/) locations. `viveka_session_state` returns the enforcement mode, posture, and computed-vs-overridden status.
+
+---
+
+## v2.0.0 — Unified product: cognitive + enforcement + tools
 
 The cognitive plugin (v1.3) and the deterministic governance runtime (v0.5.0) are unified into a single Cursor plugin with three integration layers.
 

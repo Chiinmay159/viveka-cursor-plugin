@@ -64,11 +64,16 @@ class Intent(str, Enum):
 
 
 class RiskMode(str, Enum):
-    """Governance mode assigned based on invariants + context."""
-    EXPLORE = "explore"              # maximum latitude, minimal constraints
-    BALANCED = "balanced"            # standard governance
-    CAUTIOUS = "cautious"            # elevated scrutiny
-    LOCKED = "locked"                # minimal autonomy, human approval required
+    """Enforcement mode assigned based on invariants + context.
+
+    Named to avoid collision with cognitive postures (Standard, Exploratory,
+    Speed, Adversarial). Postures shape reasoning depth; enforcement modes
+    shape action latitude.
+    """
+    PERMISSIVE = "permissive"        # maximum latitude, minimal constraints
+    STANDARD = "standard"            # default governance
+    GUARDED = "guarded"              # elevated scrutiny
+    RESTRICTED = "restricted"        # minimal autonomy, human approval required
 
 
 class Scenario(str, Enum):
@@ -334,7 +339,7 @@ class GovernanceDecision(BaseModel):
     """
     id: str = Field(description="Unique decision ID")
     timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
-    risk_mode: RiskMode = RiskMode.BALANCED
+    risk_mode: RiskMode = RiskMode.STANDARD
 
     # Inputs
     environment: EnvironmentState

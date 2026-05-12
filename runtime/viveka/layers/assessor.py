@@ -106,15 +106,15 @@ def assign_risk_mode(
     # Clamp
     risk_score = max(0.0, min(1.0, risk_score))
 
-    # Map to mode
+    # Map to enforcement mode
     if risk_score < 0.2:
-        return RiskMode.EXPLORE
+        return RiskMode.PERMISSIVE
     elif risk_score < 0.45:
-        return RiskMode.BALANCED
+        return RiskMode.STANDARD
     elif risk_score < 0.7:
-        return RiskMode.CAUTIOUS
+        return RiskMode.GUARDED
     else:
-        return RiskMode.LOCKED
+        return RiskMode.RESTRICTED
 
 
 def get_governance_params(risk_mode: RiskMode) -> dict:
@@ -124,7 +124,7 @@ def get_governance_params(risk_mode: RiskMode) -> dict:
     These control how the evaluation and adversarial layers behave.
     """
     return {
-        RiskMode.EXPLORE: {
+        RiskMode.PERMISSIVE: {
             "max_options": 5,
             "min_options": 2,
             "adversarial_scenarios": 2,
@@ -133,7 +133,7 @@ def get_governance_params(risk_mode: RiskMode) -> dict:
             "allow_assumptions": True,
             "max_retries": 5,
         },
-        RiskMode.BALANCED: {
+        RiskMode.STANDARD: {
             "max_options": 5,
             "min_options": 3,
             "adversarial_scenarios": 4,
@@ -142,7 +142,7 @@ def get_governance_params(risk_mode: RiskMode) -> dict:
             "allow_assumptions": True,
             "max_retries": 3,
         },
-        RiskMode.CAUTIOUS: {
+        RiskMode.GUARDED: {
             "max_options": 5,
             "min_options": 3,
             "adversarial_scenarios": 6,
@@ -151,7 +151,7 @@ def get_governance_params(risk_mode: RiskMode) -> dict:
             "allow_assumptions": False,
             "max_retries": 2,
         },
-        RiskMode.LOCKED: {
+        RiskMode.RESTRICTED: {
             "max_options": 3,
             "min_options": 2,
             "adversarial_scenarios": 8,

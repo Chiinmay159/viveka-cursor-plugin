@@ -15,6 +15,7 @@ Hook responses:
 
 import json
 import os
+import re
 import sys
 import tempfile
 from pathlib import Path
@@ -24,10 +25,39 @@ sys.path.insert(0, str(RUNTIME_DIR))
 
 STATE_FILE = Path(tempfile.gettempdir()) / "viveka-session-state.json"
 
+# Posture → enforcement mode bridge.
+# Cognitive postures (declared in CLAUDE.md) shape reasoning depth.
+# Enforcement modes (computed in runtime) shape action latitude.
+# This map lets a declared posture nudge the enforcement mode.
+_POSTURE_MODE_OVERRIDE = {
+    "exploratory": "permissive",
+    "speed":       "permissive",
+    "adversarial": "guarded",
+    # "standard" → no override, use computed mode
+}
+
+# Intent detection patterns applied to session task descriptions.
+_INTENT_PATTERNS = [
+    (r"\b(fix|bug|error|crash|broken|patch|hotfix)\b",       "fix"),
+    (r"\b(recover|rollback|revert|incident|outage)\b",       "recovery"),
+    (r"\b(explor|spike|prototype|research|investigat)",       "exploration"),
+    (r"\b(refactor|optimiz|improv|clean.?up|perf)",           "improvement"),
+    (r"\b(updat|upgrad|depend|migrat|deprecat|maint)",        "maintenance"),
+]
+
 
 def get_hook_event():
     """Detect which hook event invoked us via VIVEKA_HOOK_EVENT env var."""
     return os.environ.get("VIVEKA_HOOK_EVENT", "unknown")
+
+
+def _detect_intent(task: str) -> str:
+    """Infer Intent from task description. Falls back to 'feature'."""
+    lower = task.lower()
+    for pattern, intent in _INTENT_PATTERNS:
+        if re.search(pattern, lower):
+            return intent
+    return "feature"
 
 
 def load_micro_engine():
@@ -35,9 +65,7 @@ def load_micro_engine():
     from viveka.micro import MicroDecisionEngine
     from viveka.models.core import (
         Environment,
-        EnvironmentState,
         RiskMode,
-        TaskContext,
         Intent,
         Urgency,
         Reversibility,
@@ -58,7 +86,17 @@ def load_micro_engine():
                 urgency=Urgency(state.get("urgency", "medium")),
                 reversibility=Reversibility(state.get("reversibility", "high")),
             )
-            risk_mode = assign_risk_mode(env_state, context)
+            computed_mode = assign_risk_mode(env_state, context)
+
+            # Bridge: if a cognitive posture is declared, it can override
+            # the computed enforcement mode.
+            posture = state.get("posture", "standard")
+            override = _POSTURE_MODE_OVERRIDE.get(posture)
+            if override:
+                risk_mode = RiskMode(override)
+            else:
+                risk_mode = computed_mode
+
             return MicroDecisionEngine(
                 environment=env_state,
                 context=context,
@@ -78,13 +116,20 @@ def load_micro_engine():
 
 
 def handle_session_start(payload: dict) -> dict:
-    """Initialize session state on sessionStart."""
+    """Initialize session state on sessionStart.
+
+    Detects intent from task description rather than defaulting to 'feature'.
+    Stores posture if provided (defaults to 'standard').
+    """
+    task = payload.get("task", payload.get("description", "cursor agent session"))
     state = {
         "repo_path": payload.get("cwd", "."),
         "environment": "development",
-        "intent": "feature",
+        "task": task,
+        "intent": _detect_intent(task),
         "urgency": "medium",
         "reversibility": "high",
+        "posture": payload.get("posture", "standard"),
     }
     STATE_FILE.write_text(json.dumps(state))
     return {"continue": True}

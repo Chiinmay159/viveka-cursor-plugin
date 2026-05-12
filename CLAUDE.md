@@ -74,13 +74,12 @@ Bounded sub-agent depth. Sub-agents may spawn sub-agents only within the inter-a
 
 TRANSITION PROTOCOL
 
-After every stage, before entering the next: declare what the stage produced in one or two sentences, then apply the decision gate.
+After every stage, before entering the next: declare what the stage produced in one or two sentences, then apply the decision gate. The gate uses four verdicts — the same four used by enforcement hooks and MCP tools:
 
-Proceed silently when the next stage is obvious, the action is reversible, and the cost is proportionate to the task.
-
-Present and wait when the effort ahead is significant, the direction could be wrong, the action is irreversible, or multiple valid interpretations exist. State your reading, name the alternatives if any, and pause.
-
-Ask when critical information is missing or scope is undefined. Do not silently pick.
+- permit: next stage is obvious, action is reversible, cost is proportionate → proceed silently.
+- warn: proceed, but flag the concern for attention (e.g. approaching scope or cost boundary).
+- block: do not proceed — the approach needs to change before retrying.
+- escalate: present and wait (interactive) or halt-and-queue (autonomous). Use when the action is irreversible, the direction could be wrong, or critical info is missing.
 
 Skip explicitly. If you skip a stage because the task is trivial, name the skip out loud ("skipping Architecture and Catalogue — single-line edit"). Skipping is permitted; skipping silently is not. Visible skips are auditable; invisible skips are how the framework dies.
 

@@ -47,10 +47,11 @@ TOOL_DEFINITIONS = [
     {
         "name": "viveka_memory_read",
         "description": (
-            "Search .viveka/memory/ and .viveka/framework-memory/active/ for "
-            "relevant past learnings. Returns correction rules, loop-back "
-            "records, and insights matching the query. Use at the start of "
-            "tasks during Context stage."
+            "Search all Viveka memory locations for relevant past learnings: "
+            "project-local .viveka/memory/ and .viveka/framework-memory/active/, "
+            "plus user-global ~/.viveka/traces/ and ~/.viveka/policies/. "
+            "Returns correction rules, loop-back records, governance traces, "
+            "and insights matching the query. Use during Context stage."
         ),
         "inputSchema": {
             "type": "object",
@@ -93,9 +94,10 @@ TOOL_DEFINITIONS = [
     {
         "name": "viveka_session_state",
         "description": (
-            "Read the current session governance state — risk mode, "
-            "environment assessment, and task context. Useful for "
-            "understanding what governance constraints are active."
+            "Read the current session governance state — enforcement mode "
+            "(permissive/standard/guarded/restricted), cognitive posture "
+            "(standard/exploratory/speed/adversarial), detected intent, "
+            "and task context. Shows what governance constraints are active."
         ),
         "inputSchema": {
             "type": "object",
@@ -142,26 +144,39 @@ def handle_viveka_check(args: dict) -> dict:
 
 
 def handle_viveka_memory_read(args: dict) -> dict:
-    """Search .viveka/memory/ for relevant entries."""
+    """Search all Viveka memory locations for relevant entries.
+
+    Searches both project-local and user-global directories:
+      - .viveka/framework-memory/active  (project, promoted rules)
+      - .viveka/memory                   (project, task learnings)
+      - ~/.viveka/traces                 (global, governance decision records)
+      - ~/.viveka/policies               (global, policy packs)
+    """
     query = args.get("query", "").lower()
     max_results = args.get("max_results", 5)
 
-    results = []
-    search_dirs = [".viveka/framework-memory/active", ".viveka/memory"]
+    home = Path.home()
+    search_dirs = [
+        (".viveka/framework-memory/active", "framework-memory"),
+        (".viveka/memory",                  "task-memory"),
+        (str(home / ".viveka" / "traces"),  "governance-trace"),
+        (str(home / ".viveka" / "policies"),"policy"),
+    ]
 
-    for search_dir in search_dirs:
+    results = []
+    for search_dir, source_label in search_dirs:
         dir_path = Path(search_dir)
         if not dir_path.exists():
             continue
-        for md_file in sorted(dir_path.glob("*.md"), reverse=True):
+        for entry in sorted(dir_path.glob("*.md"), reverse=True):
             try:
-                content = md_file.read_text()
+                content = entry.read_text()
                 content_lower = content.lower()
                 if query and not any(term in content_lower for term in query.split()):
                     continue
                 results.append({
-                    "file": str(md_file),
-                    "source": "framework-memory" if "framework-memory" in str(md_file) else "task-memory",
+                    "file": str(entry),
+                    "source": source_label,
                     "content": content[:2000],
                 })
                 if len(results) >= max_results:
@@ -171,8 +186,28 @@ def handle_viveka_memory_read(args: dict) -> dict:
         if len(results) >= max_results:
             break
 
+    # Also search JSON trace files in ~/.viveka/traces
+    traces_dir = home / ".viveka" / "traces"
+    if traces_dir.exists() and len(results) < max_results:
+        for entry in sorted(traces_dir.glob("*.json"), reverse=True):
+            try:
+                content = entry.read_text()
+                content_lower = content.lower()
+                if query and not any(term in content_lower for term in query.split()):
+                    continue
+                results.append({
+                    "file": str(entry),
+                    "source": "governance-trace",
+                    "content": content[:2000],
+                })
+                if len(results) >= max_results:
+                    break
+            except Exception:
+                continue
+
     if not results:
-        text = f"No memory entries found matching '{query}'. Directories searched: {search_dirs}"
+        dirs_searched = [d for d, _ in search_dirs]
+        text = f"No memory entries found matching '{query}'. Directories searched: {dirs_searched}"
     else:
         text = json.dumps(results, indent=2)
 
@@ -199,12 +234,44 @@ def handle_viveka_memory_write(args: dict) -> dict:
 
 
 def handle_viveka_session_state(args: dict) -> dict:
-    """Read current session governance state."""
+    """Read current session governance state with unified labels."""
     state_file = Path(tempfile.gettempdir()) / "viveka-session-state.json"
 
     if state_file.exists():
         try:
             state = json.loads(state_file.read_text())
+
+            # Compute the effective enforcement mode for display
+            posture = state.get("posture", "standard")
+            posture_overrides = {
+                "exploratory": "permissive",
+                "speed": "permissive",
+                "adversarial": "guarded",
+            }
+            try:
+                from viveka.models.core import Environment, Intent, Urgency, Reversibility
+                from viveka.layers.scanner import scan_environment
+                from viveka.layers.assessor import assess_context, assign_risk_mode
+                env_state = scan_environment(
+                    repo_path=state.get("repo_path", "."),
+                    environment=Environment(state.get("environment", "development")),
+                )
+                context = assess_context(
+                    task=state.get("task", "cursor agent session"),
+                    intent=Intent(state.get("intent", "feature")),
+                    urgency=Urgency(state.get("urgency", "medium")),
+                    reversibility=Reversibility(state.get("reversibility", "high")),
+                )
+                computed = assign_risk_mode(env_state, context).value
+            except Exception:
+                computed = "standard"
+
+            effective = posture_overrides.get(posture, computed)
+            state["enforcement_mode"] = effective
+            state["enforcement_mode_computed"] = computed
+            if posture in posture_overrides:
+                state["enforcement_mode_reason"] = f"overridden by {posture} posture"
+
             return {"content": [{"type": "text", "text": json.dumps(state, indent=2)}]}
         except Exception:
             pass

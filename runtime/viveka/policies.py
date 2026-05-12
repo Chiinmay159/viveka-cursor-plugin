@@ -10,11 +10,11 @@ Packs compose: you can layer "production" + "payment-critical" + "after-hours"
 and the most restrictive policy wins for each parameter.
 
 Built-in packs:
-    - production-hotfix: Locked mode, low reversibility, human escalation
-    - refactor-safe: Balanced mode, high reversibility, scope limits
-    - cleanup: Explore mode, high reversibility, broad scope
-    - data-migration: Cautious mode, low reversibility, backup required
-    - incident-response: Locked mode, critical urgency, minimal scope
+    - production-hotfix: Restricted mode, low reversibility, human escalation
+    - refactor-safe: Standard mode, high reversibility, scope limits
+    - cleanup: Standard mode, high reversibility, broad scope
+    - data-migration: Guarded mode, low reversibility, backup required
+    - incident-response: Restricted mode, critical urgency, minimal scope
 
 Custom packs: YAML files in ~/.viveka/policies/
 """
@@ -100,7 +100,7 @@ BUILTIN_PACKS: dict[str, PolicyPack] = {
         name="production-hotfix",
         description="Maximum safety for production incident fixes",
         environment=Environment.PRODUCTION,
-        risk_mode=RiskMode.LOCKED,
+        risk_mode=RiskMode.RESTRICTED,
         intent=Intent.FIX,
         urgency=Urgency.CRITICAL,
         reversibility=Reversibility.LOW,
@@ -120,7 +120,7 @@ BUILTIN_PACKS: dict[str, PolicyPack] = {
         name="refactor-safe",
         description="Safe refactoring with scope guardrails",
         environment=Environment.DEVELOPMENT,
-        risk_mode=RiskMode.BALANCED,
+        risk_mode=RiskMode.STANDARD,
         intent=Intent.IMPROVEMENT,
         reversibility=Reversibility.HIGH,
         constraints=[
@@ -135,7 +135,7 @@ BUILTIN_PACKS: dict[str, PolicyPack] = {
         name="cleanup",
         description="Broad-scope cleanup with safety net",
         environment=Environment.DEVELOPMENT,
-        risk_mode=RiskMode.BALANCED,
+        risk_mode=RiskMode.STANDARD,
         intent=Intent.MAINTENANCE,
         reversibility=Reversibility.HIGH,
         constraints=[
@@ -147,7 +147,7 @@ BUILTIN_PACKS: dict[str, PolicyPack] = {
     "data-migration": PolicyPack(
         name="data-migration",
         description="Database migration with backup requirements",
-        risk_mode=RiskMode.CAUTIOUS,
+        risk_mode=RiskMode.GUARDED,
         reversibility=Reversibility.LOW,
         constraints=[
             "Must create backup before any mutation",
@@ -165,7 +165,7 @@ BUILTIN_PACKS: dict[str, PolicyPack] = {
         name="incident-response",
         description="Active incident: contain first, fix later",
         environment=Environment.PRODUCTION,
-        risk_mode=RiskMode.LOCKED,
+        risk_mode=RiskMode.RESTRICTED,
         urgency=Urgency.CRITICAL,
         reversibility=Reversibility.LOW,
         constraints=[
@@ -274,10 +274,10 @@ _ENV_SEVERITY = {
 }
 
 _RISK_SEVERITY = {
-    RiskMode.EXPLORE: 0,
-    RiskMode.BALANCED: 1,
-    RiskMode.CAUTIOUS: 2,
-    RiskMode.LOCKED: 3,
+    RiskMode.PERMISSIVE: 0,
+    RiskMode.STANDARD: 1,
+    RiskMode.GUARDED: 2,
+    RiskMode.RESTRICTED: 3,
 }
 
 _URGENCY_SEVERITY = {

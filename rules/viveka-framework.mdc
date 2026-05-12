@@ -13,7 +13,12 @@ POSTURES: Standard (default), Exploratory (defer Architecture, widen Grasp), Spe
 
 AGENT ACTIVATION: Four sub-agents available — viveka-code-agent, viveka-research-agent, viveka-doc-review-agent, viveka-adversarial. Default is no agent. Four states: no-agent / auto-deploy / ask-first / user-requested. Session veto memory suppresses re-asking. Bounded sub-agent depth (max 3).
 
-TRANSITION PROTOCOL: After every stage, declare findings then apply decision gate. Proceed silently (obvious+reversible), present and wait (significant+irreversible), or ask (missing info). Skip explicitly — name the skip. Silent skips are how the framework dies.
+TRANSITION PROTOCOL: After every stage, declare findings then apply the decision gate. The gate uses four verdicts — the same four used by enforcement hooks and MCP tools:
+- permit: next stage is obvious, action is reversible, cost is proportionate → proceed silently.
+- warn: proceed, but flag the concern for attention (e.g. approaching scope or cost boundary).
+- block: do not proceed — the approach needs to change before retrying.
+- escalate: present and wait (interactive) or halt-and-queue (autonomous). Use when the action is irreversible, the direction could be wrong, or critical info is missing.
+Skip explicitly — name the skip. Silent skips are how the framework dies.
 
 Flow: Context → Grasping → Architecture → Execution → Review → Catalogue. Any stage can loop back. Name what changed.
 
@@ -30,12 +35,12 @@ REVIEW: Health (excess/deficiency/imbalance/leakage), Bugs (defects/edge-cases/a
 CATALOGUE: Capture insights, patterns, bugs with causes, loop-backs, correction rules. Write to .viveka/memory/. Promote recurring patterns to .viveka/framework-memory/ candidates (human approval required).
 
 GOVERNANCE TOOLS: If the viveka MCP server is available, use these tools:
-- viveka_check: before irreversible actions or destructive commands, check governance. Returns permit/warn/block/escalate. Zero cost.
-- viveka_memory_read: during Context, search past task memories and framework rules by relevance.
+- viveka_check: before irreversible actions or destructive commands, check governance. Returns permit/warn/block/escalate (same four verdicts as the Transition Protocol). Zero cost.
+- viveka_memory_read: during Context, search past task memories, framework rules, and governance traces by relevance.
 - viveka_memory_write: during Catalogue, persist insights, correction rules, and loop-back records.
-- viveka_session_state: read current risk mode and governance context.
+- viveka_session_state: read current enforcement mode, posture, and governance context. Enforcement modes (permissive/standard/guarded/restricted) control action latitude; postures (standard/exploratory/speed/adversarial) control reasoning depth. Both are visible here.
 If these tools are not available, apply the Transition Protocol's decision gate manually.
 
-ENFORCEMENT: A hook-based micro-decision engine may be active. It evaluates every tool call, shell command, and file edit through deterministic governance rules. If a hook blocks an action, it will explain why. Do not retry blocked actions without changing the approach.
+ENFORCEMENT: A hook-based micro-decision engine may be active. It runs in one of four enforcement modes: permissive (maximum latitude), standard (default), guarded (elevated scrutiny), restricted (human approval required). The mode is computed from environment + task context and can be nudged by the declared cognitive posture (adversarial posture → guarded mode, exploratory/speed posture → permissive mode). Every tool call, shell command, and file edit returns one of four verdicts: permit, warn, block, escalate — the same vocabulary used by the Transition Protocol and MCP tools. If a hook blocks an action, it will explain why. Do not retry blocked actions without changing the approach.
 
 CROSS-CUTTING: Cost as signal (70%→narrow, 90%→escalate). Confidence calibration (epistemic vs aleatory, propagation rule). Generation-vs-reasoning trip wire. Stage audit trail (mandatory in autonomous mode). Bounded loop-backs (max 3, thrash detection).
