@@ -221,66 +221,26 @@ class MicroDecisionEngine:
     # ──────────────────────────────────────────────
 
     def _check_invariants(self, action: str) -> MicroDecision:
-        """Hard invariant violations. Always block."""
+        """Hard invariant violations. Always block.
+        Delegates to scanner.find_invariant_violations — single source of truth.
+        """
+        from viveka.layers.scanner import find_invariant_violations
 
-        # Budget exhausted
-        if self.env.budget and self.env.budget.remaining <= 0:
+        violations = find_invariant_violations(self.env, action)
+        if violations:
+            v = violations[0]
             return MicroDecision(
                 verdict=Verdict.BLOCK,
                 action=action,
-                reason="Token budget exhausted",
-                rule="invariant:budget",
+                reason=v.message,
+                rule=v.rule,
             )
-
-        # Production + deploy without permission
-        if (
-            self.env.environment == Environment.PRODUCTION
-            and not self.env.permissions.can_deploy
-            and _matches_any(action, ["deploy", "push to prod", "release"])
-        ):
-            return MicroDecision(
-                verdict=Verdict.BLOCK,
-                action=action,
-                reason="Deploy not permitted in production",
-                rule="invariant:deploy_permission",
-            )
-
-        # Blocked paths
-        for blocked in self.env.permissions.blocked_paths:
-            if blocked in action:
-                return MicroDecision(
-                    verdict=Verdict.BLOCK,
-                    action=action,
-                    reason=f"Action references blocked path: {blocked}",
-                    rule="invariant:blocked_path",
-                )
-
-        # Blocked tools
-        for blocked_tool in self.env.permissions.blocked_tools:
-            if blocked_tool.lower() in action.lower():
-                return MicroDecision(
-                    verdict=Verdict.BLOCK,
-                    action=action,
-                    reason=f"Blocked tool: {blocked_tool}",
-                    rule="invariant:blocked_tool",
-                )
-
         return MicroDecision(verdict=Verdict.PERMIT, action=action)
 
     def _check_protected_resources(self, action: str) -> MicroDecision:
-        """Protected branch, sensitive files, secrets."""
-
-        # Force push on protected branch
-        if self.env.git_state.get("is_protected_branch", False):
-            if _matches_any(action, ["force push", "reset --hard", "clean -fd"]):
-                return MicroDecision(
-                    verdict=Verdict.BLOCK,
-                    action=action,
-                    reason="Destructive git action on protected branch",
-                    rule="protected:branch",
-                )
-
-        # Secret/credential access
+        """Sensitive files and secrets.
+        Protected branch checks handled by _check_invariants via scanner.
+        """
         if (
             not self.env.permissions.can_access_secrets
             and _matches_any(action, [

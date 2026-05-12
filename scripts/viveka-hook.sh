@@ -5,11 +5,16 @@
 # wraps it into a daemon request, and sends it over a Unix domain socket.
 #
 # On sessionStart: spawns the Python daemon if not already running.
-# On stop: tells the daemon to shut down.
-# All other events: send to daemon, return response.
+# On stop/sessionEnd: tells the daemon to shut down.
+# All other events: send to daemon. If daemon is dead, attempt ONE respawn
+# from saved session state before falling open.
 #
 # Typical latency: ~8ms per call (vs ~570ms with the old process-per-call approach).
-# Falls open (allows everything) if daemon is unreachable.
+# Falls open (allows everything) if daemon is unreachable after respawn attempt.
+#
+# Known limitation: all Cursor windows share one daemon per user. If two windows
+# run different projects, the last sessionStart wins. This requires Cursor to
+# expose a per-session identifier to fix properly.
 
 set -euo pipefail
 
@@ -42,8 +47,9 @@ send_to_daemon() {
 }
 
 spawn_daemon() {
+    local init_payload="$1"
     rm -f "$SOCKET_PATH" "$PID_FILE" "$READY_FILE" 2>/dev/null
-    python3 "$DAEMON_SCRIPT" "$payload" &>/dev/null &
+    python3 "$DAEMON_SCRIPT" "$init_payload" &>/dev/null &
     disown
     local deadline=$((SECONDS + 5))
     while [ $SECONDS -lt $deadline ]; do
@@ -53,18 +59,29 @@ spawn_daemon() {
     return 1
 }
 
+respawn_daemon() {
+    [ -f "$STATE_FILE" ] || return 1
+    local saved_payload
+    saved_payload="$(cat "$STATE_FILE")"
+    spawn_daemon "$saved_payload"
+}
+
+ensure_daemon() {
+    daemon_alive && return 0
+    respawn_daemon
+}
+
 build_request() {
     printf '{"event":"%s","payload":%s}' "$EVENT" "$payload"
 }
 
 case "$EVENT" in
     sessionStart)
-        # Write session state for MCP server (lightweight, no Python needed)
         echo "$payload" > "$STATE_FILE" 2>/dev/null || true
 
         if daemon_alive; then
             send_to_daemon "$(build_request)"
-        elif spawn_daemon; then
+        elif spawn_daemon "$payload"; then
             send_to_daemon "$(build_request)"
         else
             echo "$FAIL_OPEN"
@@ -75,7 +92,7 @@ case "$EVENT" in
         rm -f "$STATE_FILE" 2>/dev/null || true
         ;;
     *)
-        if [ -e "$SOCKET_PATH" ]; then
+        if ensure_daemon; then
             send_to_daemon "$(build_request)"
         else
             echo "$FAIL_OPEN"

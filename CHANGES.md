@@ -1,6 +1,41 @@
 # Viveka — Changes log
 
-## v2.2.0 (current) — Persistent daemon: 14x hook performance
+## v3.0.0 (current) — Lazy skill loading + runtime extraction + audit hardening
+
+### Lazy skill loading (CLAUDE.md → kernel)
+CLAUDE.md reduced from 19,382 bytes (~4,845 tokens) to 4,791 bytes (~1,198 tokens). The monolithic framework document is replaced by a lean kernel that contains the reasoning posture, transition protocol, and a skill trigger map. Stage-specific content (Context, Grasping, Architecture, Execution, Review, Catalogue) is no longer always-loaded — each lives in its on-demand skill, loaded when the task requires it. Domain skills (code, writing, design, research, decide, diagnose) remain on-demand as before.
+
+Three loading strategies in the trigger map:
+- **Need-based:** agent detects it's entering a stage that warrants depth → loads the stage skill.
+- **Task-based:** task type detected (code, research, decision) → loads the domain skill.
+- **Ask-based:** user invokes `/viveka-<name>` → loads explicitly.
+
+For simple tasks (quick answers, single-file edits), the kernel is sufficient. No skills load.
+
+| Scenario | Before (always-on) | After (on-demand) |
+|----------|--------------------|--------------------|
+| Simple task | ~6,109 tokens | ~1,078 tokens |
+| Code task | ~6,109 tokens | ~2,996 tokens |
+| Complex code | ~6,109 tokens | ~6,700 tokens |
+| Research | ~6,109 tokens | ~2,915 tokens |
+
+Agent Activation protocol moved from CLAUDE.md to viveka-context skill (where the activation decision is made).
+
+### Runtime extraction
+~1,700 lines of model-independent governance code extracted from v0.5.0 into `runtime/viveka/`. 10 MCP tools, 9 daemon events. PolicyPack system wired into daemon.
+
+### Audit hardening (7 bugs fixed, 3 maintenance risks resolved)
+- GovernedToolkit redesigned as pure stage-contract gate (was double governance gate)
+- Invariant checks consolidated to single source in scanner.py
+- max_retries derived from _LIMITS (was duplicate definition)
+- PolicyPack blocked_paths/tools applied to engine permissions (was dead code)
+- Daemon evaluate() routes through GovernedSession (was bypassing session trace)
+- GovernedToolkit records tool calls (was missing from all paths)
+- Grammar fix in readiness.py
+
+---
+
+## v2.2.0 — Persistent daemon: 14x hook performance
 
 Hook overhead reduced from 22.8s to 1.7s per session (40 tool calls).
 

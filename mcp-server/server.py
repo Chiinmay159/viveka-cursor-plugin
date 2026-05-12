@@ -6,23 +6,32 @@ Exposes deterministic governance tools via Model Context Protocol.
 No LLM calls. No external dependencies. All local.
 
 Tools:
-  viveka_check        — Quick invariant check for a proposed action
-  viveka_memory_read  — Search .viveka/memory/ for relevant past learnings
-  viveka_memory_write — Write a task memory entry
-  viveka_session_state — Read current session governance state
+  viveka_check           — Quick governance check for a proposed action
+  viveka_memory_read     — Search .viveka/memory/ for relevant past learnings
+  viveka_memory_write    — Write a task memory entry
+  viveka_session_state   — Read current session governance state
+  viveka_status          — Layer health check (daemon, MCP, session)
+  viveka_update_posture  — Update enforcement mode via posture change
+  viveka_constraint_check — Validate text against user-declared hard constraints
+  viveka_scenarios       — Get applicable adversarial failure scenarios
+  viveka_policies        — List available governance PolicyPacks
+  viveka_session_trace   — Export governed session trace
 """
 
 import json
 import os
+import socket
 import sys
-import glob as globmod
-import re
 import tempfile
 from datetime import datetime
 from pathlib import Path
 
 RUNTIME_DIR = Path(__file__).resolve().parent.parent / "runtime"
 sys.path.insert(0, str(RUNTIME_DIR))
+
+SOCKET_PATH = Path(tempfile.gettempdir()) / "viveka-daemon.sock"
+PID_FILE = Path(tempfile.gettempdir()) / "viveka-daemon.pid"
+STATE_FILE = Path(tempfile.gettempdir()) / "viveka-session-state.json"
 
 TOOL_DEFINITIONS = [
     {
@@ -104,7 +113,145 @@ TOOL_DEFINITIONS = [
             "properties": {},
         },
     },
+    {
+        "name": "viveka_status",
+        "description": (
+            "Health check across all Viveka layers. Reports whether the "
+            "cognitive layer (Layer 1), enforcement daemon (Layer 2), and "
+            "MCP tools (Layer 3) are active. Includes daemon PID, current "
+            "enforcement mode, and session summary if the daemon is running."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {},
+        },
+    },
+    {
+        "name": "viveka_update_posture",
+        "description": (
+            "Update the cognitive posture mid-session. Syncs the change to "
+            "the enforcement daemon so the risk mode adjusts immediately. "
+            "Valid postures: standard, exploratory, speed, adversarial."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "posture": {
+                    "type": "string",
+                    "description": "New posture: standard, exploratory, speed, or adversarial",
+                    "enum": ["standard", "exploratory", "speed", "adversarial"],
+                },
+            },
+            "required": ["posture"],
+        },
+    },
+    {
+        "name": "viveka_constraint_check",
+        "description": (
+            "Validate text against user-declared hard constraints. "
+            "Returns violations (empty = valid). Deterministic keyword matching — "
+            "catches obvious constraint violations like using SQLite when "
+            "constraint says 'threading primitives only'. No LLM cost."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "text": {
+                    "type": "string",
+                    "description": "Text to validate (strategy description, proposed action, etc.)",
+                },
+                "constraints": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Hard constraints to check against, e.g. ['no external dependencies', 'threading primitives only']",
+                },
+            },
+            "required": ["text", "constraints"],
+        },
+    },
+    {
+        "name": "viveka_scenarios",
+        "description": (
+            "Get applicable adversarial failure scenarios for the current "
+            "enforcement mode. Returns scenario IDs and descriptions from "
+            "the 10-scenario taxonomy (tool_failure, stale_context, "
+            "deceptive_completion, etc.). Use during Architecture stage "
+            "to identify what could go wrong."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "risk_mode": {
+                    "type": "string",
+                    "description": "Override risk mode (default: current session mode)",
+                    "enum": ["permissive", "standard", "guarded", "restricted"],
+                },
+            },
+        },
+    },
+    {
+        "name": "viveka_policies",
+        "description": (
+            "List available governance PolicyPacks. Returns built-in packs "
+            "(production-hotfix, refactor-safe, cleanup, data-migration, "
+            "incident-response) and any user-defined packs from "
+            "~/.viveka/policies/. Shows name, description, risk mode, "
+            "and key constraints for each."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {},
+        },
+    },
+    {
+        "name": "viveka_session_trace",
+        "description": (
+            "Export the full governed session trace — every action, verdict, "
+            "escalation, and their outcomes as a linked chain. Shows the "
+            "complete decision history for the current session."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {},
+        },
+    },
 ]
+
+
+def _send_to_daemon(event: str, payload: dict = None) -> dict | None:
+    """Send a request to the daemon over the Unix socket."""
+    if not SOCKET_PATH.exists():
+        return None
+    try:
+        sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        sock.settimeout(3)
+        sock.connect(str(SOCKET_PATH))
+        request = json.dumps({"event": event, "payload": payload or {}})
+        sock.sendall(request.encode() + b"\n")
+        data = b""
+        while b"\n" not in data:
+            chunk = sock.recv(8192)
+            if not chunk:
+                break
+            data += chunk
+        sock.close()
+        if data:
+            return json.loads(data.decode().strip())
+    except Exception:
+        pass
+    return None
+
+
+def _daemon_alive() -> bool:
+    """Check if daemon process is running."""
+    if not PID_FILE.exists():
+        return False
+    try:
+        pid = int(PID_FILE.read_text().strip())
+        os.kill(pid, 0)
+        return True
+    except (ValueError, ProcessLookupError, PermissionError, OSError):
+        return False
 
 
 def handle_viveka_check(args: dict) -> dict:
@@ -112,6 +259,18 @@ def handle_viveka_check(args: dict) -> dict:
     action = args.get("action", "")
     if not action:
         return {"content": [{"type": "text", "text": "No action provided."}]}
+
+    daemon_resp = _send_to_daemon("preToolUse", {"tool": "check", "input": {"action": action}})
+    if daemon_resp and "permission" in daemon_resp:
+        verdict_map = {"allow": "permit", "deny": "block", "ask": "escalate"}
+        result = {
+            "verdict": verdict_map.get(daemon_resp["permission"], "permit"),
+            "action": action,
+            "reason": daemon_resp.get("agent_message", ""),
+            "permitted": daemon_resp["permission"] == "allow",
+            "source": "daemon",
+        }
+        return {"content": [{"type": "text", "text": json.dumps(result, indent=2)}]}
 
     try:
         from viveka.micro import MicroDecisionEngine
@@ -134,6 +293,7 @@ def handle_viveka_check(args: dict) -> dict:
             "rule": decision.rule,
             "suggestions": decision.suggestions,
             "permitted": decision.permitted,
+            "source": "standalone",
         }
         return {"content": [{"type": "text", "text": json.dumps(result, indent=2)}]}
 
@@ -144,20 +304,14 @@ def handle_viveka_check(args: dict) -> dict:
 
 
 def handle_viveka_memory_read(args: dict) -> dict:
-    """Search all Viveka memory locations for relevant entries.
-
-    Searches both project-local and user-global directories:
-      - .viveka/framework-memory/active  (project, promoted rules)
-      - .viveka/memory                   (project, task learnings)
-      - ~/.viveka/traces                 (global, governance decision records)
-      - ~/.viveka/policies               (global, policy packs)
-    """
+    """Search all Viveka memory locations for relevant entries."""
     query = args.get("query", "").lower()
     max_results = args.get("max_results", 5)
 
     home = Path.home()
+    plugin_dir = Path(__file__).resolve().parent.parent
     search_dirs = [
-        (".viveka/framework-memory/active", "framework-memory"),
+        (str(plugin_dir / ".viveka" / "framework-memory" / "active"), "framework-memory"),
         (".viveka/memory",                  "task-memory"),
         (str(home / ".viveka" / "traces"),  "governance-trace"),
         (str(home / ".viveka" / "policies"),"policy"),
@@ -186,7 +340,6 @@ def handle_viveka_memory_read(args: dict) -> dict:
         if len(results) >= max_results:
             break
 
-    # Also search JSON trace files in ~/.viveka/traces
     traces_dir = home / ".viveka" / "traces"
     if traces_dir.exists() and len(results) < max_results:
         for entry in sorted(traces_dir.glob("*.json"), reverse=True):
@@ -235,13 +388,10 @@ def handle_viveka_memory_write(args: dict) -> dict:
 
 def handle_viveka_session_state(args: dict) -> dict:
     """Read current session governance state with unified labels."""
-    state_file = Path(tempfile.gettempdir()) / "viveka-session-state.json"
-
-    if state_file.exists():
+    if STATE_FILE.exists():
         try:
-            state = json.loads(state_file.read_text())
+            state = json.loads(STATE_FILE.read_text())
 
-            # Compute the effective enforcement mode for display
             posture = state.get("posture", "standard")
             posture_overrides = {
                 "exploratory": "permissive",
@@ -279,11 +429,172 @@ def handle_viveka_session_state(args: dict) -> dict:
     return {"content": [{"type": "text", "text": "No active session state. Session may not have started yet."}]}
 
 
+def handle_viveka_status(args: dict) -> dict:
+    """Health check across all Viveka layers."""
+    result = {
+        "layer1_cognitive": "active",
+        "layer2_daemon": "inactive",
+        "layer3_mcp": "active",
+    }
+
+    if _daemon_alive():
+        result["layer2_daemon"] = "active"
+        try:
+            result["layer2_pid"] = int(PID_FILE.read_text().strip())
+        except Exception:
+            pass
+
+        daemon_resp = _send_to_daemon("status")
+        if daemon_resp:
+            result["enforcement_mode"] = daemon_resp.get("enforcement_mode", "unknown")
+            result["posture"] = daemon_resp.get("posture", "unknown")
+            result["session_summary"] = daemon_resp.get("session_summary", {})
+    elif PID_FILE.exists():
+        result["layer2_daemon"] = "dead (stale PID file)"
+
+    if STATE_FILE.exists():
+        try:
+            state = json.loads(STATE_FILE.read_text())
+            result.setdefault("posture", state.get("posture", "standard"))
+            result["intent"] = state.get("intent", "feature")
+            result["cwd"] = state.get("cwd", state.get("repo_path", "."))
+        except Exception:
+            pass
+
+    text = json.dumps(result, indent=2)
+    return {"content": [{"type": "text", "text": text}]}
+
+
+def handle_viveka_update_posture(args: dict) -> dict:
+    """Update posture and sync to daemon."""
+    posture = args.get("posture", "")
+    if posture not in ("standard", "exploratory", "speed", "adversarial"):
+        return {"content": [{"type": "text", "text": f"Invalid posture: {posture}. Must be standard, exploratory, speed, or adversarial."}]}
+
+    results = []
+
+    if STATE_FILE.exists():
+        try:
+            state = json.loads(STATE_FILE.read_text())
+            state["posture"] = posture
+            STATE_FILE.write_text(json.dumps(state))
+            results.append("State file updated")
+        except Exception as e:
+            results.append(f"State file update failed: {e}")
+
+    daemon_resp = _send_to_daemon("postureUpdate", {"posture": posture})
+    if daemon_resp and daemon_resp.get("updated"):
+        results.append(
+            f"Daemon updated: {daemon_resp.get('previous_mode')} → {daemon_resp.get('enforcement_mode')}"
+        )
+    elif daemon_resp:
+        results.append(f"Daemon update failed: {daemon_resp.get('reason', 'unknown')}")
+    else:
+        results.append("Daemon unreachable — posture saved to state file only")
+
+    text = json.dumps({
+        "posture": posture,
+        "actions": results,
+    }, indent=2)
+    return {"content": [{"type": "text", "text": text}]}
+
+
+def handle_viveka_constraint_check(args: dict) -> dict:
+    """Deterministic constraint validation."""
+    text = args.get("text", "")
+    constraints = args.get("constraints", [])
+    if not text or not constraints:
+        return {"content": [{"type": "text", "text": "Both text and constraints are required."}]}
+
+    daemon_resp = _send_to_daemon("constraintCheck", {
+        "text": text, "constraints": constraints,
+    })
+    if daemon_resp and "violations" in daemon_resp:
+        return {"content": [{"type": "text", "text": json.dumps(daemon_resp, indent=2)}]}
+
+    try:
+        from viveka.constraints import validate_against_constraints
+        violations = validate_against_constraints(text, constraints)
+        result = {
+            "valid": len(violations) == 0,
+            "violations": violations,
+            "checked_constraints": len(constraints),
+        }
+        return {"content": [{"type": "text", "text": json.dumps(result, indent=2)}]}
+    except ImportError:
+        return {"content": [{"type": "text", "text": "Constraint validation module not available."}]}
+
+
+def handle_viveka_scenarios(args: dict) -> dict:
+    """Return applicable adversarial scenarios."""
+    risk_mode_str = args.get("risk_mode", "")
+
+    daemon_resp = _send_to_daemon("scenarios", {"risk_mode": risk_mode_str})
+    if daemon_resp and "scenarios" in daemon_resp:
+        return {"content": [{"type": "text", "text": json.dumps(daemon_resp, indent=2)}]}
+
+    try:
+        from viveka.scenarios import get_applicable_scenarios, SCENARIO_DESCRIPTIONS
+        from viveka.models.core import RiskMode
+        mode = RiskMode(risk_mode_str) if risk_mode_str else RiskMode.STANDARD
+        scenarios, suppression_log = get_applicable_scenarios(mode)
+        result = {
+            "risk_mode": mode.value,
+            "scenarios": [
+                {"id": s.value, "description": SCENARIO_DESCRIPTIONS.get(s, "")}
+                for s in scenarios
+            ],
+            "suppression_log": suppression_log,
+        }
+        return {"content": [{"type": "text", "text": json.dumps(result, indent=2)}]}
+    except ImportError:
+        return {"content": [{"type": "text", "text": "Scenarios module not available."}]}
+
+
+def handle_viveka_policies(args: dict) -> dict:
+    """List available PolicyPacks."""
+    try:
+        from viveka.policies import list_policies, get_policy
+        policies = list_policies()
+        result = []
+        for name, description, source in policies:
+            entry = {"name": name, "description": description, "source": source}
+            pack = get_policy(name)
+            if pack:
+                if pack.risk_mode:
+                    entry["risk_mode"] = pack.risk_mode.value
+                if pack.constraints:
+                    entry["constraints"] = pack.constraints
+                if pack.max_files_modified is not None:
+                    entry["max_files_modified"] = pack.max_files_modified
+                if pack.require_human_approval:
+                    entry["require_human_approval"] = True
+            result.append(entry)
+        return {"content": [{"type": "text", "text": json.dumps(result, indent=2)}]}
+    except ImportError:
+        return {"content": [{"type": "text", "text": "Policies module not available."}]}
+
+
+def handle_viveka_session_trace(args: dict) -> dict:
+    """Export governed session trace."""
+    daemon_resp = _send_to_daemon("sessionTrace")
+    if daemon_resp and daemon_resp.get("trace"):
+        return {"content": [{"type": "text", "text": json.dumps(daemon_resp["trace"], indent=2)}]}
+
+    return {"content": [{"type": "text", "text": "No active governed session. Daemon may not be running."}]}
+
+
 TOOL_HANDLERS = {
     "viveka_check": handle_viveka_check,
     "viveka_memory_read": handle_viveka_memory_read,
     "viveka_memory_write": handle_viveka_memory_write,
     "viveka_session_state": handle_viveka_session_state,
+    "viveka_status": handle_viveka_status,
+    "viveka_update_posture": handle_viveka_update_posture,
+    "viveka_constraint_check": handle_viveka_constraint_check,
+    "viveka_scenarios": handle_viveka_scenarios,
+    "viveka_policies": handle_viveka_policies,
+    "viveka_session_trace": handle_viveka_session_trace,
 }
 
 
@@ -300,7 +611,7 @@ def handle_request(request: dict) -> dict:
             "result": {
                 "protocolVersion": "2024-11-05",
                 "capabilities": {"tools": {}},
-                "serverInfo": {"name": "viveka", "version": "2.2.0"},
+                "serverInfo": {"name": "viveka", "version": "3.0.0"},
             },
         }
 

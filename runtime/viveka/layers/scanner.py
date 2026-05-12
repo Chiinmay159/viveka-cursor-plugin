@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import subprocess
+from dataclasses import dataclass
 from pathlib import Path
 
 from viveka.models.core import (
@@ -126,6 +127,68 @@ def _detect_available_tools() -> list[str]:
     return tools
 
 
+@dataclass
+class InvariantViolation:
+    """Structured invariant violation with rule tag for tracing."""
+    message: str
+    rule: str
+
+
+def find_invariant_violations(
+    environment: EnvironmentState,
+    proposed_action: str,
+) -> list[InvariantViolation]:
+    """
+    Single source of truth for environment invariant checks.
+    Used by both the scanner (macro pipeline) and the micro engine.
+    """
+    violations = []
+    action_lower = proposed_action.lower()
+
+    if environment.budget and environment.budget.remaining <= 0:
+        violations.append(InvariantViolation(
+            "Token budget exhausted", "invariant:budget",
+        ))
+
+    if environment.environment == Environment.PRODUCTION:
+        if not environment.permissions.can_deploy and any(
+            p in action_lower for p in ["deploy", "push to prod", "release"]
+        ):
+            violations.append(InvariantViolation(
+                "Deploy action not permitted in production",
+                "invariant:deploy_permission",
+            ))
+        if not environment.permissions.can_modify_git and "git push" in action_lower:
+            violations.append(InvariantViolation(
+                "Git push not permitted in production",
+                "invariant:deploy_permission",
+            ))
+
+    if environment.git_state.get("is_protected_branch", False):
+        for keyword in ["force push", "reset --hard", "clean -fd"]:
+            if keyword in action_lower:
+                violations.append(InvariantViolation(
+                    f"Destructive action '{keyword}' on protected branch",
+                    "invariant:protected_branch",
+                ))
+
+    for blocked in environment.permissions.blocked_paths:
+        if blocked in proposed_action:
+            violations.append(InvariantViolation(
+                f"Action references blocked path: {blocked}",
+                "invariant:blocked_path",
+            ))
+
+    for blocked_tool in environment.permissions.blocked_tools:
+        if blocked_tool.lower() in action_lower:
+            violations.append(InvariantViolation(
+                f"Blocked tool referenced: {blocked_tool}",
+                "invariant:blocked_tool",
+            ))
+
+    return violations
+
+
 def check_invariant_violations(
     environment: EnvironmentState,
     proposed_action: str,
@@ -133,37 +196,5 @@ def check_invariant_violations(
     """
     Check a proposed action against environment invariants.
     Returns list of violation descriptions. Empty = action is permitted.
-
-    This is the hard gate. Violations here are non-negotiable.
     """
-    violations = []
-
-    # Budget check
-    if environment.budget and environment.budget.remaining <= 0:
-        violations.append("Token budget exhausted")
-
-    # Production safety
-    if environment.environment == Environment.PRODUCTION:
-        if not environment.permissions.can_deploy and "deploy" in proposed_action.lower():
-            violations.append("Deploy action not permitted in production")
-        if not environment.permissions.can_modify_git and "git push" in proposed_action.lower():
-            violations.append("Git push not permitted in production")
-
-    # Protected branch
-    if environment.git_state.get("is_protected_branch", False):
-        destructive_keywords = ["force push", "reset --hard", "clean -fd"]
-        for keyword in destructive_keywords:
-            if keyword in proposed_action.lower():
-                violations.append(f"Destructive action '{keyword}' on protected branch")
-
-    # Path restrictions
-    for blocked in environment.permissions.blocked_paths:
-        if blocked in proposed_action:
-            violations.append(f"Action references blocked path: {blocked}")
-
-    # Tool restrictions
-    for blocked_tool in environment.permissions.blocked_tools:
-        if blocked_tool in proposed_action.lower():
-            violations.append(f"Blocked tool referenced: {blocked_tool}")
-
-    return violations
+    return [v.message for v in find_invariant_violations(environment, proposed_action)]

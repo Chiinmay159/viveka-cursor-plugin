@@ -1,7 +1,7 @@
 {
   "name": "viveka",
-  "version": "2.2.0",
-  "description": "Cognitive governance for AI agents. Reasoning posture + deterministic enforcement + decision tools.",
+  "version": "3.0.0",
+  "description": "Cognitive governance for AI agents. Lean kernel + on-demand skills + deterministic enforcement + decision tools.",
   "author": {
     "name": "Chinmay Bhandari"
   },

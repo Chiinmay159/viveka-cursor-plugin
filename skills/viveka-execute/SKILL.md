@@ -62,7 +62,7 @@ Every roadmap declares wall-clock and cost ceilings before execution begins. Thr
 
 - *Max wall-clock:* if the task exceeds it, halt and present current state.
 - *Max sub-agent depth:* recursive delegation cannot exceed this depth (default 3). Prevents stack-style runaway.
-- *Max token budget:* see Cost as Signal in CLAUDE.md cross-cutting. At 70% consumed, narrow scope. At 90%, terminate and queue.
+- *Max token budget:* at 70% consumed, narrow scope. At 90%, terminate and queue. Cost overruns usually mean the architecture was wrong.
 
 Kill switches are not failures — they are the framework refusing to spend more than the work is worth.
 

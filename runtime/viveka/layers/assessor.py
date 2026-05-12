@@ -122,8 +122,11 @@ def get_governance_params(risk_mode: RiskMode) -> dict:
     Return governance parameters for a given risk mode.
 
     These control how the evaluation and adversarial layers behave.
+    max_retries is derived from micro._LIMITS — single source of truth.
     """
-    return {
+    from viveka.micro import _LIMITS
+
+    _MACRO_PARAMS = {
         RiskMode.PERMISSIVE: {
             "max_options": 5,
             "min_options": 2,
@@ -131,7 +134,6 @@ def get_governance_params(risk_mode: RiskMode) -> dict:
             "survival_threshold": 0.4,
             "require_human_approval": False,
             "allow_assumptions": True,
-            "max_retries": 5,
         },
         RiskMode.STANDARD: {
             "max_options": 5,
@@ -140,7 +142,6 @@ def get_governance_params(risk_mode: RiskMode) -> dict:
             "survival_threshold": 0.6,
             "require_human_approval": False,
             "allow_assumptions": True,
-            "max_retries": 3,
         },
         RiskMode.GUARDED: {
             "max_options": 5,
@@ -149,7 +150,6 @@ def get_governance_params(risk_mode: RiskMode) -> dict:
             "survival_threshold": 0.7,
             "require_human_approval": False,
             "allow_assumptions": False,
-            "max_retries": 2,
         },
         RiskMode.RESTRICTED: {
             "max_options": 3,
@@ -158,6 +158,9 @@ def get_governance_params(risk_mode: RiskMode) -> dict:
             "survival_threshold": 0.8,
             "require_human_approval": True,
             "allow_assumptions": False,
-            "max_retries": 1,
         },
-    }[risk_mode]
+    }
+
+    params = dict(_MACRO_PARAMS[risk_mode])
+    params["max_retries"] = _LIMITS[risk_mode]["max_retries"]
+    return params

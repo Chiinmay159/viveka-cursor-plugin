@@ -18,6 +18,7 @@ import signal
 import socket
 import sys
 import tempfile
+from datetime import datetime
 from pathlib import Path
 
 RUNTIME_DIR = Path(__file__).resolve().parent.parent / "runtime"
@@ -56,37 +57,68 @@ class Daemon:
     def __init__(self):
         self.engine = None
         self.Verdict = None
+        self.RiskMode = None
+        self.posture = "standard"
+        self.cwd = "."
+        self.task = ""
+        self.policy_name = ""
+        self.session = None
 
     def initialize(self, payload: dict):
-        """One-time heavy init: import, scan, build engine."""
-        from viveka.micro import MicroDecisionEngine, Verdict
+        """One-time heavy init: import, scan, build engine, apply policy."""
+        from viveka.micro import MicroDecisionEngine, Verdict, _LIMITS
         from viveka.models.core import (
             Environment, RiskMode, Intent, Urgency, Reversibility,
         )
         from viveka.layers.scanner import scan_environment
         from viveka.layers.assessor import assess_context, assign_risk_mode
+        from viveka.policies import get_policy
 
         self.Verdict = Verdict
+        self.RiskMode = RiskMode
 
-        task = payload.get("task", payload.get("description", "cursor agent session"))
-        repo_path = payload.get("cwd", ".")
-        intent_str = _detect_intent(task)
-        posture = payload.get("posture", "standard")
+        self.task = payload.get("task", payload.get("description", "cursor agent session"))
+        self.cwd = payload.get("cwd", ".")
+        intent_str = _detect_intent(self.task)
+        self.posture = payload.get("posture", "standard")
+        self.policy_name = payload.get("policy", "")
 
         env_state = scan_environment(
-            repo_path=repo_path,
+            repo_path=self.cwd,
             environment=Environment.DEVELOPMENT,
         )
         context = assess_context(
-            task=task,
+            task=self.task,
             intent=Intent(intent_str),
             urgency=Urgency.MEDIUM,
             reversibility=Reversibility.HIGH,
         )
         computed_mode = assign_risk_mode(env_state, context)
 
-        override = _POSTURE_MODE_OVERRIDE.get(posture)
+        override = _POSTURE_MODE_OVERRIDE.get(self.posture)
         risk_mode = RiskMode(override) if override else computed_mode
+
+        # Apply PolicyPack if specified in payload or .viveka/policy.yaml
+        policy = None
+        if self.policy_name:
+            policy = get_policy(self.policy_name)
+        else:
+            policy_file = Path(self.cwd) / ".viveka" / "policy.yaml"
+            if policy_file.exists():
+                try:
+                    import yaml
+                    with open(policy_file) as f:
+                        policy_data = yaml.safe_load(f)
+                    policy_name = policy_data.get("policy", "")
+                    if policy_name:
+                        policy = get_policy(policy_name)
+                        self.policy_name = policy_name
+                except Exception:
+                    pass
+
+        if policy:
+            if policy.risk_mode:
+                risk_mode = policy.risk_mode
 
         self.engine = MicroDecisionEngine(
             environment=env_state,
@@ -94,9 +126,179 @@ class Daemon:
             risk_mode=risk_mode,
         )
 
+        # Apply PolicyPack overrides
+        if policy:
+            limits = dict(_LIMITS[risk_mode])
+            if policy.max_retries is not None:
+                limits["max_retries"] = policy.max_retries
+            if policy.max_files_modified is not None:
+                limits["max_files_modified"] = policy.max_files_modified
+            if policy.max_actions is not None:
+                limits["max_actions"] = policy.max_actions
+            self.engine._limits = limits
+
+            if policy.blocked_paths:
+                self.engine.env.permissions.blocked_paths = list(
+                    set(self.engine.env.permissions.blocked_paths + policy.blocked_paths)
+                )
+            if policy.blocked_tools:
+                self.engine.env.permissions.blocked_tools = list(
+                    set(self.engine.env.permissions.blocked_tools + policy.blocked_tools)
+                )
+
+        # Initialize GovernedSession for session-level tracking
+        try:
+            from viveka.session import GovernedSession
+            self.session = GovernedSession(
+                micro=self.engine,
+                task=self.task,
+                known_constraints=policy.constraints if policy else [],
+            )
+        except Exception:
+            self.session = None
+
+    def update_posture(self, new_posture: str) -> dict:
+        """Update the enforcement mode based on a new cognitive posture."""
+        if not self.engine or not self.RiskMode:
+            return {"updated": False, "reason": "engine not initialized"}
+
+        from viveka.micro import _LIMITS
+
+        self.posture = new_posture
+        override = _POSTURE_MODE_OVERRIDE.get(new_posture)
+        if override:
+            new_mode = self.RiskMode(override)
+        else:
+            new_mode = self.engine.risk_mode
+
+        old_mode = self.engine.risk_mode
+        self.engine.risk_mode = new_mode
+        self.engine._limits = _LIMITS[new_mode]
+
+        return {
+            "updated": True,
+            "posture": new_posture,
+            "enforcement_mode": new_mode.value,
+            "previous_mode": old_mode.value,
+        }
+
+    def get_status(self) -> dict:
+        """Return daemon health and session summary."""
+        result = {
+            "alive": True,
+            "pid": os.getpid(),
+            "posture": self.posture,
+            "cwd": self.cwd,
+            "task": self.task,
+            "policy": self.policy_name,
+        }
+        if self.engine:
+            result["enforcement_mode"] = self.engine.risk_mode.value
+            result["session_summary"] = self.engine.get_session_summary()
+        else:
+            result["enforcement_mode"] = "unknown"
+            result["session_summary"] = {}
+        if self.session:
+            result["governed_session"] = self.session.get_summary()
+        return result
+
+    def check_constraints(self, text: str, constraints: list[str]) -> dict:
+        """Deterministic constraint validation."""
+        try:
+            from viveka.constraints import validate_against_constraints
+            violations = validate_against_constraints(text, constraints)
+            return {
+                "valid": len(violations) == 0,
+                "violations": violations,
+                "checked_constraints": len(constraints),
+            }
+        except ImportError:
+            return {"valid": True, "violations": [], "error": "constraints module not available"}
+
+    def get_scenarios(self, risk_mode_str: str = "") -> dict:
+        """Return applicable adversarial scenarios for current/given risk mode."""
+        try:
+            from viveka.scenarios import get_applicable_scenarios, SCENARIO_DESCRIPTIONS
+            from viveka.models.core import RiskMode
+            mode = RiskMode(risk_mode_str) if risk_mode_str else (
+                self.engine.risk_mode if self.engine else RiskMode.STANDARD
+            )
+            scenarios, suppression_log = get_applicable_scenarios(mode)
+            return {
+                "risk_mode": mode.value,
+                "scenarios": [
+                    {"id": s.value, "description": SCENARIO_DESCRIPTIONS.get(s, "")}
+                    for s in scenarios
+                ],
+                "suppression_log": suppression_log,
+            }
+        except ImportError:
+            return {"scenarios": [], "error": "scenarios module not available"}
+
+    def write_session_checkpoint(self):
+        """Write a session trace to .viveka/checkpoints/ on shutdown."""
+        if not self.engine:
+            return
+        summary = self.engine.get_session_summary()
+        if summary["total_actions"] < 3:
+            return
+
+        checkpoint_dir = Path(self.cwd) / ".viveka" / "checkpoints"
+        try:
+            checkpoint_dir.mkdir(parents=True, exist_ok=True)
+        except OSError:
+            return
+
+        now = datetime.now()
+        filename = f"{now.strftime('%Y-%m-%d')}-session-{now.strftime('%H%M%S')}.json"
+        checkpoint = {
+            "type": "session-checkpoint",
+            "generated": "auto",
+            "timestamp": now.isoformat(),
+            "posture": self.posture,
+            "policy": self.policy_name,
+            "enforcement_mode": self.engine.risk_mode.value,
+            "task": self.task,
+            "cwd": self.cwd,
+            "summary": summary,
+            "files_modified": sorted(self.engine.session.files_modified),
+        }
+        if self.session:
+            checkpoint["session_trace"] = self.session.get_trace()
+        try:
+            (checkpoint_dir / filename).write_text(json.dumps(checkpoint, indent=2))
+        except OSError:
+            pass
+
     def evaluate(self, action: str) -> dict:
         """Evaluate an action. Returns Cursor hook response."""
         if not self.engine:
+            return {"continue": True, "permission": "allow"}
+
+        if self.session:
+            result = self.session.propose(action)
+            V = self.Verdict
+            if result.verdict == V.PERMIT:
+                return {"continue": True, "permission": "allow"}
+            elif result.verdict == V.WARN:
+                return {
+                    "continue": True,
+                    "permission": "allow",
+                    "agent_message": f"[viveka] Warning: {result.reason}",
+                }
+            elif result.verdict == V.BLOCK:
+                return {
+                    "continue": True,
+                    "permission": "deny",
+                    "agent_message": f"[viveka] Blocked: {result.reason}. {'; '.join(result.suggestions)}",
+                }
+            elif result.verdict == V.ESCALATE:
+                return {
+                    "continue": True,
+                    "permission": "ask",
+                    "user_message": f"Viveka governance: {result.reason}",
+                    "agent_message": f"[viveka] Escalated to user: {result.reason}",
+                }
             return {"continue": True, "permission": "allow"}
 
         decision = self.engine.evaluate(action)
@@ -134,7 +336,32 @@ class Daemon:
             return {"continue": True}
 
         if event in ("stop", "sessionEnd"):
+            self.write_session_checkpoint()
             return {"continue": True, "_shutdown": True}
+
+        if event == "status":
+            return {"continue": True, **self.get_status()}
+
+        if event == "postureUpdate":
+            new_posture = payload.get("posture", "standard")
+            result = self.update_posture(new_posture)
+            return {"continue": True, **result}
+
+        if event == "constraintCheck":
+            text = payload.get("text", "")
+            constraints = payload.get("constraints", [])
+            result = self.check_constraints(text, constraints)
+            return {"continue": True, **result}
+
+        if event == "scenarios":
+            risk_mode = payload.get("risk_mode", "")
+            result = self.get_scenarios(risk_mode)
+            return {"continue": True, **result}
+
+        if event == "sessionTrace":
+            if self.session:
+                return {"continue": True, "trace": self.session.get_trace()}
+            return {"continue": True, "trace": None}
 
         if event == "preToolUse":
             tool_name = payload.get("tool", "")
@@ -189,7 +416,6 @@ def main():
 
     daemon = Daemon()
 
-    # If sessionStart payload was passed as arg, initialize immediately
     if len(sys.argv) > 1:
         try:
             init_payload = json.loads(sys.argv[1])
@@ -200,12 +426,13 @@ def main():
     sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
     sock.bind(str(SOCKET_PATH))
     sock.listen(5)
-    sock.settimeout(300)  # 5-minute idle timeout
+    sock.settimeout(300)
 
     PID_FILE.write_text(str(os.getpid()))
     READY_FILE.write_text("1")
 
     def handle_signal(signum, frame):
+        daemon.write_session_checkpoint()
         cleanup()
         sys.exit(0)
 
@@ -217,7 +444,8 @@ def main():
             try:
                 conn, _ = sock.accept()
             except socket.timeout:
-                break  # idle too long, exit
+                daemon.write_session_checkpoint()
+                break
 
             try:
                 conn.settimeout(5)

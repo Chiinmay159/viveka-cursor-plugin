@@ -46,7 +46,21 @@ Probe before relying. Before writing code that depends on a connector tool's res
 - *Type signature:* primarily code, research, document review, decision, diagnosis, conversation, or compound. Drives agent activation.
 - *Scale signal:* trivial, standard, compound, or long-run. Drives agent activation thresholds.
 - *Stakes signal:* low, standard, or high (security/legal/financial/regulatory/customer-facing irreversible). High stakes elevate to Adversarial posture and viveka-adversarial activation.
-- *Activation candidate:* given type + scale + stakes + posture + operating mode, name the activation state — no agent / auto-deploy / ask first / user-requested. Apply session override memory (if a prior veto exists for this signature this session, suppress the proposal). See AGENT ACTIVATION in CLAUDE.md.
+- *Activation candidate:* given type + scale + stakes + posture + operating mode, name the activation state:
+
+## Agent Activation Protocol
+
+Four states cover every case:
+- **No agent (default).** Factual lookups, single-file edits, conversational exchanges, decision support without artifact.
+- **Auto-deploy.** Task type + scale clearly match an agent contract. Clear-case thresholds: viveka-code-agent for >1-2 files or >50 lines; viveka-research-agent for >2-3 sources or structured synthesis; viveka-doc-review-agent for documents >3K words; viveka-adversarial for Adversarial posture.
+- **Ask first.** Gray case — could be done inline or warrants an agent. Surface the proposal in one line and pause.
+- **User-requested.** User explicitly asks for an agent. Always permitted; overrides framework judgment.
+
+**Session veto memory.** When the user vetoes an activation, record (agent_name, task_type_signature). Suppress the same proposal for the rest of the session. "No agents this session" suppresses all. Memory clears at session end.
+
+**Posture interaction.** Speed suppresses optional activation (specialists still spawn for clear cases). Adversarial always spawns viveka-adversarial. Exploratory suppresses live-review isolation but keeps specialists.
+
+**Record every activation decision** in the stage audit trail — auto-deployed / asked-approved / asked-declined / user-requested / no-agent. Mandatory in autonomous mode.
 
 ## Memory Read Protocol
 
