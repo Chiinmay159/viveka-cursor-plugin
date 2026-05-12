@@ -12,7 +12,7 @@ Viveka ships as a single Cursor plugin with three integration layers:
 
 **Layer 2 — Enforcement** (hooks). A deterministic micro-decision engine evaluates every tool call, shell command, and file edit. Permits, warns, blocks, or escalates to the user. No LLM cost. Runs in milliseconds. Requires Python 3.10+.
 
-**Layer 3 — Decision Tools** (MCP server). Exposes `viveka_check`, `viveka_memory_read`, `viveka_memory_write`, and `viveka_session_state` as tools the agent can call. Memory persists across sessions. Requires Python 3.10+.
+**Layer 3 — Decision Tools** (MCP server). Exposes 10 governance tools the agent can call: action checks, memory read/write, session state, posture updates, constraint validation, adversarial scenarios, policy packs, and session trace export. All local, all deterministic. Requires Python 3.10+.
 
 ```
 ┌─────────────────────────────────────────┐
@@ -44,7 +44,11 @@ Restart Cursor. Layer 1 (cognitive posture) is immediately active. Layers 2 and 
 
 ### Tier 2 — Full governance (Python 3.10+)
 
-The plugin includes the runtime. If Python 3.10+ is available, hooks and MCP tools activate automatically. No pip install needed — the runtime is bundled.
+The plugin includes the runtime. If Python 3.10+ is available, hooks and MCP tools activate automatically.
+
+```bash
+pip install pydantic   # required for Layers 2-3 (models/core.py)
+```
 
 Verify it works: open a Cursor session and check for `viveka` in the MCP tools list (Cmd+Shift+P → "MCP: List Tools").
 
@@ -106,7 +110,7 @@ Hooks fail-open: if Python is unavailable, all actions proceed. The cognitive la
 
 ### Decision Tools (MCP)
 
-Four MCP tools available when the server is running:
+Ten MCP tools available when the server is running:
 
 | Tool | What it does | Cost |
 |------|-------------|------|
@@ -114,6 +118,12 @@ Four MCP tools available when the server is running:
 | `viveka_memory_read` | Search past task memories and framework rules | Zero (file I/O) |
 | `viveka_memory_write` | Persist task memory for future sessions | Zero (file I/O) |
 | `viveka_session_state` | Read current risk mode and governance context | Zero (file read) |
+| `viveka_status` | Layer health check (daemon, MCP, session) | Zero |
+| `viveka_update_posture` | Change cognitive posture mid-session, sync to daemon | Zero |
+| `viveka_constraint_check` | Validate text against hard constraints | Zero (keyword) |
+| `viveka_scenarios` | Get adversarial failure scenarios for current mode | Zero |
+| `viveka_policies` | List available governance PolicyPacks | Zero |
+| `viveka_session_trace` | Export full governed session decision chain | Zero |
 
 ### Memory
 
@@ -149,9 +159,9 @@ Memory is read at the start of every task (via `viveka_memory_read` or manual se
 - **Stage audit trail** — posture, switches, agent activations, stages entered/skipped, loop-backs.
 - **Bounded loop-backs** — max 3 returns to upstream stages. Thrash detection.
 
-## No External Dependencies
+## Dependencies
 
-Viveka requires no API keys, no accounts, no network access. The enforcement layer is deterministic Python. The decision tools are local file I/O. The cognitive reasoning runs in whatever model Cursor provides.
+Viveka requires no API keys, no accounts, no network access. The cognitive layer (Layer 1) has zero dependencies. Layers 2 and 3 require Python 3.10+ with `pydantic` installed (`pip install pydantic`). The enforcement engine is deterministic Python. The decision tools are local file I/O. The cognitive reasoning runs in whatever model the platform provides.
 
 ## Origin
 

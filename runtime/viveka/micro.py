@@ -497,8 +497,21 @@ def _matches_any(text: str, patterns: list[str]) -> bool:
 
 
 def _normalize_action(action: str) -> str:
-    """Normalize an action string for retry detection."""
-    # Strip numbers, whitespace variations, specific IDs
+    """Normalize an action string for retry detection.
+
+    Normalizes the action verb and parameters but preserves file path
+    identity. Without this, writing to file1.py, file2.py, file3.py
+    would all normalize to fileN.py and trigger false retry detection
+    on migration files, test files, versioned configs, etc.
+    """
+    parts = action.strip().split(None, 1)
+    if len(parts) == 2:
+        verb, target = parts
+        # Normalize only the verb portion (strip digits, collapse whitespace)
+        verb_normalized = re.sub(r'\d+', 'N', verb.lower())
+        # Preserve target (file path / identifier) as-is for identity
+        return f"{verb_normalized} {target.lower()}"
+    # Single-word action or empty — normalize fully
     normalized = re.sub(r'\d+', 'N', action.lower().strip())
     normalized = re.sub(r'\s+', ' ', normalized)
     return normalized
