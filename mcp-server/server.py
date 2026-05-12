@@ -18,6 +18,7 @@ Tools:
   viveka_session_trace   — Export governed session trace
 """
 
+import hashlib
 import json
 import os
 import socket
@@ -29,9 +30,14 @@ from pathlib import Path
 RUNTIME_DIR = Path(__file__).resolve().parent.parent / "runtime"
 sys.path.insert(0, str(RUNTIME_DIR))
 
-SOCKET_PATH = Path(tempfile.gettempdir()) / "viveka-daemon.sock"
-PID_FILE = Path(tempfile.gettempdir()) / "viveka-daemon.pid"
-STATE_FILE = Path(tempfile.gettempdir()) / "viveka-session-state.json"
+def _session_hash() -> str:
+    """Derive per-project session hash from cwd, matching viveka-hook.sh."""
+    return hashlib.sha1(os.getcwd().encode()).hexdigest()[:12]
+
+_HASH = _session_hash()
+SOCKET_PATH = Path(tempfile.gettempdir()) / f"viveka-daemon-{_HASH}.sock"
+PID_FILE = Path(tempfile.gettempdir()) / f"viveka-daemon-{_HASH}.pid"
+STATE_FILE = Path(tempfile.gettempdir()) / f"viveka-session-state-{_HASH}.json"
 
 TOOL_DEFINITIONS = [
     {
