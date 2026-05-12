@@ -123,10 +123,36 @@ def _infer_exclusions(allowed: str, text: str) -> list[str]:
     return found
 
 
+_EXTERNAL_DEPENDENCY_TERMS = {
+    "redis": "Redis", "postgresql": "PostgreSQL", "postgres": "PostgreSQL",
+    "mysql": "MySQL", "mongodb": "MongoDB", "mongo": "MongoDB",
+    "dynamodb": "DynamoDB", "elasticsearch": "Elasticsearch",
+    "rabbitmq": "RabbitMQ", "kafka": "Kafka", "memcached": "memcached",
+    "docker": "Docker", "kubernetes": "Kubernetes",
+    "aws": "AWS", "gcp": "GCP", "azure": "Azure",
+    "sqlite": "SQLite", "celery": "Celery",
+    "nginx": "nginx", "apache": "Apache",
+}
+
+_EXCLUSION_EXPANSIONS = {
+    "external dependencies": _EXTERNAL_DEPENDENCY_TERMS,
+    "external services": _EXTERNAL_DEPENDENCY_TERMS,
+    "third-party": _EXTERNAL_DEPENDENCY_TERMS,
+    "third party": _EXTERNAL_DEPENDENCY_TERMS,
+}
+
+
 def _text_mentions(text: str, excluded: str) -> bool:
     """Check if text mentions the excluded concept (fuzzy keyword match)."""
     if excluded in text:
         return True
+
+    expansion = _EXCLUSION_EXPANSIONS.get(excluded)
+    if expansion:
+        for term in expansion:
+            if term in text:
+                return True
+
     words = excluded.split()
     if len(words) >= 2:
         return all(w in text for w in words if len(w) > 3)

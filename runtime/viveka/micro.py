@@ -344,9 +344,11 @@ class MicroDecisionEngine:
     def _check_destructive_actions(self, action: str) -> MicroDecision:
         """Flag or block destructive actions based on risk mode."""
         destructive_patterns = [
-            "delete", "drop table", "truncate", "rm -rf",
-            "force push", "reset --hard", "destroy",
-            "remove all", "wipe", "purge",
+            "delete", "drop table", "drop database", "truncate",
+            "rm -rf", "rm -r ",
+            "force push", "push --force", "push -f ",
+            "reset --hard", "clean -fd",
+            "destroy", "remove all", "wipe", "purge",
         ]
 
         if _matches_any(action, destructive_patterns):

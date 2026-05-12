@@ -165,7 +165,10 @@ def find_invariant_violations(
             ))
 
     if environment.git_state.get("is_protected_branch", False):
-        for keyword in ["force push", "reset --hard", "clean -fd"]:
+        for keyword in [
+            "force push", "push --force", "push -f ",
+            "reset --hard", "clean -fd",
+        ]:
             if keyword in action_lower:
                 violations.append(InvariantViolation(
                     f"Destructive action '{keyword}' on protected branch",
