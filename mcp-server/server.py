@@ -300,7 +300,7 @@ def handle_request(request: dict) -> dict:
             "result": {
                 "protocolVersion": "2024-11-05",
                 "capabilities": {"tools": {}},
-                "serverInfo": {"name": "viveka", "version": "2.0.0"},
+                "serverInfo": {"name": "viveka", "version": "2.1.0"},
             },
         }
 
