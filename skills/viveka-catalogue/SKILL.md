@@ -21,6 +21,16 @@ Capture what this interaction revealed. Persist it for future sessions.
 - Bad: "Be more careful with auth code."
 - Good: "Token refresh must invalidate the old token within the same database transaction as new token creation."
 
+## Memory Taxonomy
+Tag entries with:
+- `project`
+- `domain`
+- `stage-of-failure`
+- `severity`
+- `supersedes-id` (when replacing a prior rule)
+
+Correction rules may supersede older rules; always keep supersession chain explicit.
+
 ## Task Memory Format
 
 ```markdown
@@ -53,6 +63,36 @@ Environment: [platform, tools, tech stack]
 
 ## Reading Previous Catalogues
 At the start of new tasks, search `.viveka/memory/` for relevant past files. Read correction rules first — most actionable. Do not load all past catalogues — search by relevance.
+
+## Memory Hygiene
+- Archive stale rules (project sunset, abandoned domain, contradicted by evidence).
+- Record archive reason and date.
+- Run periodic catalogue consolidation to merge duplicates and remove drift.
+
+## Framework-Memory Promotion
+When the same correction pattern appears across multiple tasks with consistent evidence:
+- Promote it to framework-level candidate rule.
+- Threshold policy: require repeated evidence across independent tasks before promotion.
+
+Store promoted candidates in:
+- `.viveka/framework-memory/`
+- Versioned markdown entries with provenance links to source task memories.
+
+## Supervised Promotion Pipeline (Tier 8, Phase A)
+Use supervised promotion only; do not auto-modify framework files.
+
+1. Detect repeated pattern across independent tasks.
+2. Write candidate to `.viveka/framework-memory/candidates/`.
+3. Run contradiction check against existing framework rules.
+4. Attach evidence bundle:
+   - source task memory links
+   - failure mode prevented
+   - expected trade-offs
+5. Propose merge with rollback plan.
+6. Require explicit human approval before framework merge.
+
+Recommended threshold:
+- At least 3 independent task confirmations before proposing merge.
 
 ## What Not to Catalogue
 Routine operations with no insights. Speculative conclusions. Cataloguing for its own sake — every entry must earn its place.

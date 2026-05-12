@@ -1,6 +1,8 @@
 # Viveka
 
-A cognitive framework for AI agents. One reasoning posture, ten skills, four platforms.
+A cognitive framework for AI agents. One reasoning posture, twelve skills, four platforms.
+
+**Essence:** Viveka is a cognitive posture that produces healthy outputs through context-awareness, structural decomposition, and live coherence.
 
 Viveka shapes how an agent thinks — not what tools it calls. The system prompt sets the posture. The skills provide depth when a stage needs more than the compressed version.
 
@@ -43,9 +45,44 @@ Copy content from `platforms/chat/preferences.md` into Settings → User Prefere
 1. **Context** — Map natural order, time, place, entities, task. Search before assuming.
 2. **Grasping** — Understand fully, simulate scenarios, evaluate by value equation. Decision gate: proceed or present.
 3. **Architecture** — Essence → foundation → scope → sequence → detail → aesthetics. Dependency order.
-4. **Execution** — Plan roadmap, delegate single-function agents, live review throughout. Loop back when wrong.
-5. **Review** — Health, bugs, coherence. Trace the journey from essence to output.
-6. **Catalogue** — Insights, patterns, bugs, loop-backs, correction rules. Written to `.viveka/memory/`.
+4. **Execution** — Plan roadmap, apply dual-mode transition protocol, enforce bounded loop-backs, and run live review throughout.
+5. **Review** — Health, bugs, coherence, sufficiency threshold, and autonomous acceptance when no human reviewer exists.
+6. **Catalogue** — Insights, patterns, bugs, loop-backs, correction rules, and framework-memory promotion.
+
+## Agentic-First Controls
+
+- Dual-mode transitions at every stage boundary (interactive vs autonomous behavior).
+- Time/cost bounds (loop-back cap, sub-agent depth cap, context budget signals at 70% and 90%).
+- Stage audit trail for autonomous runs.
+- Sub-agent verification gate for irreversible actions.
+- Generation-vs-reasoning trip wire to force evidence search when confidence outpaces evidence.
+
+## Tier 7: Posture Diversity
+
+Viveka supports controlled posture selection per task:
+- `standard` (default)
+- `exploratory`
+- `speed`
+- `adversarial`
+
+Safety invariants remain active in every posture:
+- irreversible-action gate
+- minimum review requirement for irreversible outcomes
+- scope compliance
+
+Switching policy:
+- declare posture at task start
+- max one switch per task unless escalated
+- fall back to `standard` on conflict
+
+## Tier 8: Self-Modification (Phase A)
+
+Self-modification is currently supervised:
+- no autonomous framework rewrites
+- repeated correction patterns become promotion candidates
+- candidates are stored in `.viveka/framework-memory/candidates/`
+- contradiction check + rollback plan required
+- human approval required before merge into framework
 
 ## Skills
 
@@ -61,6 +98,8 @@ Copy content from `platforms/chat/preferences.md` into Settings → User Prefere
 | viveka-writing | Prose output |
 | viveka-research | Information finding and synthesis |
 | viveka-design | Visual/UX output |
+| viveka-decide | Decision support without implementation |
+| viveka-diagnose | Debugging and root-cause analysis |
 
 ## Origin
 

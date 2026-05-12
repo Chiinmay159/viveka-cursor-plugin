@@ -37,6 +37,20 @@ Trace the journey:
 ## Verification
 Never mark complete without proving it works. Run tests. Demonstrate correctness through evidence, not assertion.
 
+## Sufficiency Threshold
+Stop when all are true:
+- Essence is honored.
+- No irreversible flaws remain.
+- Marginal cost of additional improvement exceeds marginal value.
+
+Do not continue polishing indefinitely once threshold is met.
+
+## Autonomous Acceptance
+When no human will review:
+- Freeze success criteria from task brief before final check.
+- Reject any output that fails criteria.
+- Queue rejected output with explicit failure reason and required follow-up.
+
 ## Decision
 - **Passes:** deliver, note minor items.
 - **Reversible flaws:** fix what you can, present judgment calls to user.

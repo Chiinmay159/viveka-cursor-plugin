@@ -21,6 +21,9 @@ Map what is real before anything else.
 - What environment? Terminal, IDE, web chat, desktop app, mobile?
 - What file system access? Version control state?
 - What external services are connected?
+- Which tools/connectors are loaded right now?
+- What can each tool verify directly?
+- If a tool fails or schema drifts, what is fallback behavior?
 
 ## Entities
 **Agent:** Known fully. Do not invent or understate capabilities.
@@ -33,6 +36,13 @@ Map what is real before anything else.
 
 ## Search Protocol
 Before concluding: search memory, read codebase structure, check tools, look for existing patterns. Do not assume — look.
+
+## Catalogue Read Protocol
+When past memory exists:
+- Query by task domain, failure mode, and stage.
+- Read order: correction rules first, then loop-back records, then general notes.
+- Conflict handling: recency wins for facts, severity wins for safety rules.
+- Apply a load budget so memory does not flood current context.
 
 ## Output
 Structured understanding (held internally) that feeds Grasping. If critical information is missing, ask one focused question.

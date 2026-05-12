@@ -25,6 +25,10 @@ When sources conflict, note the conflict and present both.
 - **Separate layers:** facts (documented), inferences (logical), hypotheses (possible), opinions (judgment).
 - Never blend inference with fact.
 - State confidence level. Name what would change the conclusion.
+- Separate uncertainty types:
+  - **Epistemic:** unknown because evidence is incomplete.
+  - **Aleatory:** inherently variable world outcomes.
+- Confidence floor rule: no conclusion may have higher confidence than its weakest critical input.
 - **Stop condition:** does the user have enough to decide? If yes, stop. Offer to go deeper on specific threads.
 
 ## Output
