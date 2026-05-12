@@ -1,6 +1,31 @@
 # Viveka — Changes log
 
-## v2.1.0 (current) — Jargon unification + posture-enforcement bridge
+## v2.2.0 (current) — Persistent daemon: 14x hook performance
+
+Hook overhead reduced from 22.8s to 1.7s per session (40 tool calls).
+
+### Architecture change
+The old design spawned a new Python process for every hook event (~570ms each: Python startup + pydantic import + environment scan + rule evaluation). The new design:
+
+1. **`viveka-daemon.py`** — long-running Python process started once on `sessionStart`. Imports all heavy dependencies upfront, creates the `MicroDecisionEngine`, listens on a Unix domain socket. The actual rule evaluation takes <0.1ms.
+2. **`viveka-hook.sh`** — bash thin client invoked by Cursor for each hook event. Sends the payload to the daemon over the Unix socket via `nc -U`. Bash+nc starts in ~8ms vs ~50ms for Python.
+3. **Fail-open preserved** — if the daemon is unreachable (crashed, Python unavailable), the bash client returns `{"continue": true}` immediately.
+
+### Measured performance
+
+| Metric | v2.1.0 | v2.2.0 |
+|--------|--------|--------|
+| Per-hook latency | ~570ms | ~16ms |
+| 40-call session overhead | 22.8s | 1.7s |
+| Daemon startup (one-time) | — | ~1s |
+| Idle timeout | — | 5 min |
+
+### Fallback chain
+`viveka-hook.sh` (bash+nc, 8ms) → `viveka-hook.py` (Python thin client, 50ms) → fail-open (0ms). The Python thin client is retained as a cross-platform fallback for systems without `nc -U`.
+
+---
+
+## v2.1.0 — Jargon unification + posture-enforcement bridge
 
 Five internal consistency fixes that resolve conflicts between the cognitive layer and the deterministic runtime.
 

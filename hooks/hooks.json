@@ -2,31 +2,31 @@
   "hooks": {
     "sessionStart": [
       {
-        "command": "VIVEKA_HOOK_EVENT=sessionStart python3 scripts/viveka-hook.py",
-        "timeout": 5
+        "command": "VIVEKA_HOOK_EVENT=sessionStart bash scripts/viveka-hook.sh",
+        "timeout": 10
       }
     ],
     "preToolUse": [
       {
-        "command": "VIVEKA_HOOK_EVENT=preToolUse python3 scripts/viveka-hook.py",
+        "command": "VIVEKA_HOOK_EVENT=preToolUse bash scripts/viveka-hook.sh",
         "timeout": 5
       }
     ],
     "beforeShellExecution": [
       {
-        "command": "VIVEKA_HOOK_EVENT=beforeShellExecution python3 scripts/viveka-hook.py",
+        "command": "VIVEKA_HOOK_EVENT=beforeShellExecution bash scripts/viveka-hook.sh",
         "timeout": 5
       }
     ],
     "afterFileEdit": [
       {
-        "command": "VIVEKA_HOOK_EVENT=afterFileEdit python3 scripts/viveka-hook.py",
+        "command": "VIVEKA_HOOK_EVENT=afterFileEdit bash scripts/viveka-hook.sh",
         "timeout": 5
       }
     ],
     "stop": [
       {
-        "command": "VIVEKA_HOOK_EVENT=stop python3 scripts/viveka-hook.py",
+        "command": "VIVEKA_HOOK_EVENT=stop bash scripts/viveka-hook.sh",
         "timeout": 5
       }
     ]
