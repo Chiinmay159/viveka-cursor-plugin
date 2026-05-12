@@ -1,6 +1,6 @@
 ---
 name: viveka-grasp
-description: Scenario evaluation and decision gate. Use when the task has multiple viable approaches, significant stakes, or when choosing between meaningfully different strategies. Evaluates by value equation and determines whether to proceed, present, or ask.
+description: Scenario evaluation and decision gate. Use when the task has multiple viable approaches or significant stakes. Determines whether to proceed, present, or ask.
 ---
 
 # Grasp
@@ -15,7 +15,7 @@ Before evaluating options, confirm you understand:
 - What is the user's actual priority — speed, correctness, elegance, cost?
 
 ## Scenario Simulation
-Generate 2-4 structurally different approaches. For each, evaluate:
+Generate 2–4 structurally different approaches. For each, evaluate:
 - **Functionality:** Does it solve the problem completely or partially?
 - **Demonstrated potential:** Does it create leverage for known adjacent needs? (Not hypothetical.)
 - **Scale:** Point fix or systemic improvement?
@@ -26,12 +26,14 @@ Generate 2-4 structurally different approaches. For each, evaluate:
 ## Value Equation
 (functionality + demonstrated potential + scale) − (energy + time + vulnerabilities + irreversibility)
 
-When options score similarly, prefer: more reversible, faster to validate, simpler.
+When options score similarly, prefer: more reversible, faster to validate, simpler. Each candidate must earn its place against the alternatives — generation alone is not selection.
 
 ## Search Protocol
-Search web, codebases, memory, skills for precedents and patterns. Do not evaluate from training data alone when live information is available.
+Search web, codebases, memory, skills for precedents and patterns. Do not evaluate from training data alone when live information is available. Read `.viveka/memory/` for relevant past task memories before committing to an approach.
 
 ## Decision Gate
+This gate is the same one the framework's Transition Protocol applies at every stage boundary. Use it here to choose how to leave Grasping.
+
 **Proceed** when: clear task, reversible action, proportionate cost, obvious interpretation.
 **Present approach** when: significant effort, direction could be wrong, irreversible, multiple valid paths.
 **Ask** when: critical information missing, contradictions, undefined scope.

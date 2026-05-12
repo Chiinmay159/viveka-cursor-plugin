@@ -1,6 +1,6 @@
 ---
 name: viveka-code
-description: Code-specific execution discipline. Use when the output is source code. Covers surgical precision, simplicity, assumption surfacing, correctness, and code review protocols.
+description: Code-specific execution discipline. Use when the output is source code. Covers surgical precision, simplicity, assumption surfacing, correctness, and verification primitives.
 ---
 
 # Code
@@ -17,10 +17,18 @@ description: Code-specific execution discipline. Use when the output is source c
 - **Correct:** handle error paths. Consider null/empty/boundary cases. Timing-safe comparisons for security. Validate at boundaries.
 - **Clear names:** describe purpose, not implementation. Functions do one thing.
 
-## After Writing
-- Run it. Run existing tests. Run new tests.
-- Verify success criteria from "Before Writing" are met.
-- Verify no files outside change boundary were modified.
+## Verification Primitives (After Writing)
+
+Code is the most verifiable output mode. Use every primitive that applies.
+
+- *Run it.* The single most important check. Failing to run is failing to verify.
+- *Run existing tests.* Regression catches what review misses.
+- *Run new tests.* Verify the success criteria from Before Writing.
+- *Diff check.* Confirm no files outside the change boundary were modified.
+- *Type check / lint.* Where the language supports it.
+- *Adversarial scan.* For changes touching auth, input parsing, or external boundaries — apply Review's "what would a hostile user do?" frame.
+
+Evidence, not assertion. "Tests pass" is not verification — "tests pass with output X" is.
 
 ## Code Review (when reviewing, not writing)
 Delegate categories to separate agents for large codebases:
@@ -28,3 +36,5 @@ Delegate categories to separate agents for large codebases:
 - **Correctness:** edge cases, error handling, race conditions.
 - **Health:** dead code, unused imports, redundant logic, speculative abstractions.
 - **Consistency:** naming, formatting, patterns matching rest of codebase.
+
+Each sub-reviewer runs under an inter-agent contract (see viveka-execute). Summaries are claims — spot-check against the artifact before integrating.

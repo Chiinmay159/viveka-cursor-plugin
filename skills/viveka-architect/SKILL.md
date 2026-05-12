@@ -1,6 +1,6 @@
 ---
 name: viveka-architect
-description: Six-layer structural decomposition for compound outputs. Use before building anything complex — code, documents, plans, designs. Decomposes into essence, foundation, scope, sequence, detail, aesthetics. Ensures dependency-correct build order.
+description: Six-layer structural decomposition for compound outputs. Use before building anything complex. Layers: essence, foundation, scope, sequence, detail, surface aesthetics.
 ---
 
 # Architect
@@ -15,7 +15,7 @@ What is the soul of this thing? Not what it does — what it is. State in one se
 - An invoice's essence is a promise of payment. A login page's is trust. An API's is a contract.
 
 ### 2. Foundation
-What must be in place for everything else to work? Data model, invariants, security model, evidence base, core abstractions. This is what you cannot change later without rebuilding everything above.
+What must be in place for everything else to work? Data model, invariants, security model, evidence base, core abstractions. For visual outputs, foundational aesthetics belong here — typography, scale, palette, spacing tokens, brand grammar. These are decisions you cannot change later without rebuilding everything above.
 
 ### 3. Scope
 What is in and what is out? Name both explicitly, including why exclusions are excluded. Undefined scope causes overbuilding.
@@ -26,8 +26,8 @@ Components and their ideal order. Map the dependency graph — build in dependen
 ### 5. Detail
 Depth per component, proportional to essence. Critical security functions get 50 lines. Utility helpers get 5. Not uniform — proportional.
 
-### 6. Aesthetics
-Surfaces that elicit experience. Naming, documentation, error messages, visual grammar, accessibility, responsiveness, copywriting. Not decoration — the final layer of architecture. Can only be done right after everything below is sound.
+### 6. Surface Aesthetics
+The final layer applied after everything below is sound. Naming, microcopy, error messages, motion, finishing, copywriting. Not decoration — the visible surface that elicits experience. Foundational aesthetics decisions (Layer 2) constrain what Layer 6 can do; surface aesthetics never override foundation.
 
 ## Search Protocol
 Search for reference implementations, existing patterns, and validate foundation against tech stack.

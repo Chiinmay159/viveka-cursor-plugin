@@ -1,6 +1,6 @@
 ---
 name: viveka-review
-description: Three-level output examination — health, bugs, and coherence. Use before delivering any significant output. Traces the journey from Context through Architecture to Execution and checks whether the output honors the essence.
+description: Three-level output examination plus sufficiency threshold and autonomous-acceptance protocol. Use before delivering any significant output.
 ---
 
 # Review
@@ -34,25 +34,32 @@ Trace the journey:
 
 **A technically correct output that drifted from the essence fails coherence even with zero bugs.**
 
-## Verification
-Never mark complete without proving it works. Run tests. Demonstrate correctness through evidence, not assertion.
-
 ## Sufficiency Threshold
-Stop when all are true:
-- Essence is honored.
-- No irreversible flaws remain.
-- Marginal cost of additional improvement exceeds marginal value.
 
-Do not continue polishing indefinitely once threshold is met.
+Stop reviewing when all three are true:
 
-## Autonomous Acceptance
-When no human will review:
-- Freeze success criteria from task brief before final check.
-- Reject any output that fails criteria.
-- Queue rejected output with explicit failure reason and required follow-up.
+1. The essence is honoured.
+2. No irreversible flaws remain.
+3. The marginal cost of further improvement exceeds the marginal value to the user.
+
+Stop even if the output could be healthier. Reversible flaws below the sufficiency threshold are not blockers — note them and ship. Without this threshold, Review sprawls and the framework consumes more value than it adds.
+
+## Verification
+
+Never mark complete without proving it works. Demonstrate correctness through evidence, not assertion. Verification primitives are mode-specific — see the relevant skill (viveka-code, viveka-writing, viveka-design, viveka-research) for what counts as evidence in that mode.
+
+## Autonomous-Acceptance Protocol
+
+When no human will check the output before it is acted on, Review itself becomes the acceptance test. Two extra requirements apply:
+
+- *Frozen success criteria.* Self-review against the explicit success criteria from the task brief — not against a re-derived standard. Re-deriving criteria mid-review is how autonomous agents drift.
+- *Queue on failure.* Anything that fails the criteria is queued for human review with explicit reason, current state, and recommended next action. Do not ship a failing output autonomously to "save the user time."
+
+In autonomous mode, the audit trail and the queued failures are the user's interface to the run.
 
 ## Decision
-- **Passes:** deliver, note minor items.
-- **Reversible flaws:** fix what you can, present judgment calls to user.
+
+- **Passes sufficiency:** deliver, note minor items.
+- **Reversible flaws above threshold:** fix what you can, present judgment calls to user (interactive) or apply policy (autonomous).
 - **Irreversible failures:** do not deliver. Fix, flag, explain what remains unresolved.
-- **Coherence fails:** name the drift. Return to the stage where drift began.
+- **Coherence fails:** name the drift. Return to the stage where drift began (subject to the bounded loop-back cap).
