@@ -12,17 +12,20 @@
 # Typical latency: ~8ms per call (vs ~570ms with the old process-per-call approach).
 # Falls open (allows everything) if daemon is unreachable after respawn attempt.
 #
-# Known limitation: all Cursor windows share one daemon per user. If two windows
-# run different projects, the last sessionStart wins. This requires Cursor to
-# expose a per-session identifier to fix properly.
+# Each Cursor window gets its own daemon, keyed by working directory.
+# The cwd is hashed to produce unique socket/pid/state file paths.
 
 set -euo pipefail
 
 TMPDIR="${TMPDIR:-/tmp}"
-SOCKET_PATH="${TMPDIR}/viveka-daemon.sock"
-PID_FILE="${TMPDIR}/viveka-daemon.pid"
-READY_FILE="${TMPDIR}/viveka-daemon.ready"
-STATE_FILE="${TMPDIR}/viveka-session-state.json"
+
+# Derive per-session paths from a hash of the working directory.
+# Each Cursor window has its own cwd, so each gets its own daemon.
+SESSION_HASH=$(printf '%s' "$PWD" | shasum | cut -c1-12)
+SOCKET_PATH="${TMPDIR}/viveka-daemon-${SESSION_HASH}.sock"
+PID_FILE="${TMPDIR}/viveka-daemon-${SESSION_HASH}.pid"
+READY_FILE="${TMPDIR}/viveka-daemon-${SESSION_HASH}.ready"
+STATE_FILE="${TMPDIR}/viveka-session-state-${SESSION_HASH}.json"
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 DAEMON_SCRIPT="${SCRIPT_DIR}/viveka-daemon.py"
@@ -49,7 +52,7 @@ send_to_daemon() {
 spawn_daemon() {
     local init_payload="$1"
     rm -f "$SOCKET_PATH" "$PID_FILE" "$READY_FILE" 2>/dev/null
-    python3 "$DAEMON_SCRIPT" "$init_payload" &>/dev/null &
+    python3 "$DAEMON_SCRIPT" "$init_payload" "$SESSION_HASH" &>/dev/null &
     disown
     local deadline=$((SECONDS + 5))
     while [ $SECONDS -lt $deadline ]; do

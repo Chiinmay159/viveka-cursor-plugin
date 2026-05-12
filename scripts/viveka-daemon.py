@@ -24,9 +24,17 @@ from pathlib import Path
 RUNTIME_DIR = Path(__file__).resolve().parent.parent / "runtime"
 sys.path.insert(0, str(RUNTIME_DIR))
 
-SOCKET_PATH = Path(tempfile.gettempdir()) / "viveka-daemon.sock"
-PID_FILE = Path(tempfile.gettempdir()) / "viveka-daemon.pid"
-READY_FILE = Path(tempfile.gettempdir()) / "viveka-daemon.ready"
+def _session_paths(session_hash: str = "default"):
+    """Derive per-session socket/pid/ready paths from a cwd hash."""
+    tmpdir = Path(tempfile.gettempdir())
+    return (
+        tmpdir / f"viveka-daemon-{session_hash}.sock",
+        tmpdir / f"viveka-daemon-{session_hash}.pid",
+        tmpdir / f"viveka-daemon-{session_hash}.ready",
+    )
+
+# Module-level defaults — overridden in main() from argv.
+SOCKET_PATH, PID_FILE, READY_FILE = _session_paths()
 
 _POSTURE_MODE_OVERRIDE = {
     "exploratory": "permissive",
@@ -412,6 +420,12 @@ def cleanup():
 
 
 def main():
+    global SOCKET_PATH, PID_FILE, READY_FILE
+
+    # Accept session hash from hook (argv[2]) for per-project isolation.
+    session_hash = sys.argv[2] if len(sys.argv) > 2 else "default"
+    SOCKET_PATH, PID_FILE, READY_FILE = _session_paths(session_hash)
+
     cleanup()
 
     daemon = Daemon()
