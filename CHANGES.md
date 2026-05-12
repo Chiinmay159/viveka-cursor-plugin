@@ -1,6 +1,44 @@
 # Viveka — Changes log
 
-## v1.3 (current) — Sub-agents + activation policy
+## v2.0.0 (current) — Unified product: cognitive + enforcement + tools
+
+The cognitive plugin (v1.3) and the deterministic governance runtime (v0.5.0) are unified into a single Cursor plugin with three integration layers.
+
+### Layer 2: Enforcement via hooks
+
+The v0.5.0 `MicroDecisionEngine` is wired into Cursor hooks. Every tool call (`preToolUse`), shell command (`beforeShellExecution`), and file edit (`afterFileEdit`) passes through the deterministic rule engine. Verdicts: permit, warn, block, escalate. No LLM cost.
+
+Session lifecycle hooks (`sessionStart`, `stop`) initialize and clean up governance state.
+
+Hooks fail-open: if Python is not available, all actions proceed and the cognitive layer (Layer 1) still guides reasoning.
+
+### Layer 3: MCP decision tools
+
+Four tools exposed via MCP server:
+- `viveka_check` — deterministic governance check for proposed actions
+- `viveka_memory_read` — search .viveka/memory/ and .viveka/framework-memory/
+- `viveka_memory_write` — persist task memory entries
+- `viveka_session_state` — read current governance context
+
+All local, all zero-cost, no external dependencies.
+
+### Runtime bundled
+
+The deterministic kernel from v0.5.0 is bundled in `runtime/viveka/` — models, micro-decision engine, environment scanner, context assessor. The LLM-dependent governance pipeline (Governor, option generation, stress testing) is not included — that reasoning happens in the agent's own model via the cognitive layer.
+
+### Net effect (v2.0.0 vs v1.3)
+
+| | v1.3 | v2.0.0 |
+|---|---|---|
+| Cognitive layer | yes | yes |
+| Enforcement (hooks) | no | yes — deterministic micro-engine |
+| Decision tools (MCP) | no | yes — 4 tools, all local |
+| External dependencies | none | none |
+| Graceful degradation | n/a | yes — Tier 1 (prompt-only) always works |
+
+---
+
+## v1.3 — Sub-agents + activation policy
 
 The cognitive layer of v1.0–v1.2 becomes operational. Four sub-agents are added, gated by a type-driven activation policy that mirrors the Transition Protocol's decision gate.
 

@@ -1,15 +1,16 @@
 {
   "name": "viveka",
-  "version": "1.3.0",
-  "description": "Cognitive framework for AI agents. Six-stage reasoning posture with postures, sub-agents, and supervised self-modification.",
+  "version": "2.0.0",
+  "description": "Cognitive governance for AI agents. Reasoning posture + deterministic enforcement + decision tools.",
   "author": {
     "name": "Chinmay Bhandari"
   },
   "homepage": "https://github.com/Chiinmay159/viveka-cursor-plugin",
   "license": "MIT",
-  "rules": [
-    "rules/viveka-framework.mdc"
-  ],
+  "keywords": ["governance", "agents", "reasoning", "cognitive", "framework"],
+  "rules": ["rules/viveka-framework.mdc"],
   "skills": "skills",
-  "agents": "agents"
+  "agents": "agents",
+  "hooks": "hooks/hooks.json",
+  "mcpServers": "mcp.json"
 }
