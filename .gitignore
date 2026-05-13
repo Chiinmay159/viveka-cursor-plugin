@@ -2,3 +2,4 @@
 __pycache__/
 *.pyc
 .viveka/checkpoints/
+.viveka/observations.jsonl

@@ -38,6 +38,24 @@ _HASH = _session_hash()
 SOCKET_PATH = Path(tempfile.gettempdir()) / f"viveka-daemon-{_HASH}.sock"
 PID_FILE = Path(tempfile.gettempdir()) / f"viveka-daemon-{_HASH}.pid"
 STATE_FILE = Path(tempfile.gettempdir()) / f"viveka-session-state-{_HASH}.json"
+OBS_FILE = Path(".viveka") / "observations.jsonl"
+
+
+def _log_mcp_tool_call(tool_name: str, tool_args: dict, result: dict):
+    """Phase 0 observation — append MCP tool usage to observations.jsonl."""
+    entry = {
+        "session_id": _HASH,
+        "timestamp": datetime.now().isoformat(),
+        "event": "mcp_tool_call",
+        "tool": tool_name,
+        "has_error": result.get("isError", False),
+    }
+    try:
+        OBS_FILE.parent.mkdir(parents=True, exist_ok=True)
+        with open(OBS_FILE, "a") as f:
+            f.write(json.dumps(entry, separators=(",", ":")) + "\n")
+    except OSError:
+        pass
 
 TOOL_DEFINITIONS = [
     {
@@ -642,6 +660,10 @@ def handle_request(request: dict) -> dict:
                 result = {"content": [{"type": "text", "text": f"Error: {e}"}], "isError": True}
         else:
             result = {"content": [{"type": "text", "text": f"Unknown tool: {tool_name}"}], "isError": True}
+
+        # Phase 0 observation — log every MCP tool call
+        _log_mcp_tool_call(tool_name, tool_args, result)
+
         return {"jsonrpc": "2.0", "id": req_id, "result": result}
 
     return {

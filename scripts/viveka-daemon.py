@@ -59,6 +59,35 @@ def _detect_intent(task: str) -> str:
     return "feature"
 
 
+class ObservationLog:
+    """Phase 0 instrumentation — append-only structured log.
+
+    Writes one JSON object per line to .viveka/observations.jsonl.
+    This is the data source for v4.0 pruning decisions.
+    """
+
+    def __init__(self, cwd: str):
+        self._path = Path(cwd) / ".viveka" / "observations.jsonl"
+        self._session_id = ""
+
+    def set_session(self, session_id: str):
+        self._session_id = session_id
+
+    def log(self, event: str, **fields):
+        entry = {
+            "session_id": self._session_id,
+            "timestamp": datetime.now().isoformat(),
+            "event": event,
+            **fields,
+        }
+        try:
+            self._path.parent.mkdir(parents=True, exist_ok=True)
+            with open(self._path, "a") as f:
+                f.write(json.dumps(entry, separators=(",", ":")) + "\n")
+        except OSError:
+            pass
+
+
 class Daemon:
     """Holds the warm engine and handles requests."""
 
@@ -71,6 +100,7 @@ class Daemon:
         self.task = ""
         self.policy_name = ""
         self.session = None
+        self.obs = ObservationLog(".")
 
     def initialize(self, payload: dict):
         """One-time heavy init: import, scan, build engine, apply policy."""
@@ -164,6 +194,18 @@ class Daemon:
             )
         except Exception:
             self.session = None
+
+        # Phase 0 observation — log session start
+        self.obs = ObservationLog(self.cwd)
+        session_id = self.session.session_id if self.session else f"ses_{os.getpid()}"
+        self.obs.set_session(session_id)
+        self.obs.log(
+            "session_start",
+            task=self.task,
+            posture=self.posture,
+            policy=self.policy_name,
+            enforcement_mode=risk_mode.value,
+        )
 
     def update_posture(self, new_posture: str) -> dict:
         """Update the enforcement mode based on a new cognitive posture."""
@@ -393,6 +435,19 @@ class Daemon:
         if self.session:
             result = self.session.propose(action)
             V = self.Verdict
+
+            # Phase 0 observation — log every evaluation
+            summary = self.engine.get_session_summary()
+            self.obs.log(
+                "evaluate",
+                action=action,
+                verdict=result.verdict.value,
+                rule=result.rule,
+                files_modified=summary["files_modified"],
+                retries=summary["retry_patterns"].get(action, 0),
+                session_action_count=summary["total_actions"],
+            )
+
             if result.verdict == V.PERMIT:
                 return {"continue": True, "permission": "allow"}
             elif result.verdict == V.WARN:
@@ -451,6 +506,9 @@ class Daemon:
             return {"continue": True}
 
         if event in ("stop", "sessionEnd"):
+            if self.engine:
+                summary = self.engine.get_session_summary()
+                self.obs.log("session_end", **summary)
             self.write_session_checkpoint()
             return {"continue": True, "_shutdown": True}
 
@@ -460,6 +518,7 @@ class Daemon:
         if event == "postureUpdate":
             new_posture = payload.get("posture", "standard")
             result = self.update_posture(new_posture)
+            self.obs.log("posture_update", old_posture=result.get("previous_mode", ""), new_posture=new_posture)
             return {"continue": True, **result}
 
         if event == "constraintCheck":
