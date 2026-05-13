@@ -101,6 +101,11 @@ class Daemon:
         self.policy_name = ""
         self.session = None
         self.obs = ObservationLog(".")
+        # Phase 0 — intervention tracking for acceptance/correction metrics
+        self._last_verdict = "permit"
+        self._last_action = ""
+        self._last_rule = ""
+        self._escalation_outcomes = []  # list of (action, user_approved: bool|None)
 
     def initialize(self, payload: dict):
         """One-time heavy init: import, scan, build engine, apply policy."""
@@ -438,6 +443,17 @@ class Daemon:
 
             # Phase 0 observation — log every evaluation
             summary = self.engine.get_session_summary()
+
+            # Correction detection: did the agent change behavior after an intervention?
+            corrected_after_warning = (
+                self._last_verdict in ("warn", "block")
+                and action != self._last_action
+            )
+            repeated_after_warning = (
+                self._last_verdict in ("warn", "block")
+                and action == self._last_action
+            )
+
             self.obs.log(
                 "evaluate",
                 action=action,
@@ -446,7 +462,16 @@ class Daemon:
                 files_modified=summary["files_modified"],
                 retries=summary["retry_patterns"].get(action, 0),
                 session_action_count=summary["total_actions"],
+                prev_verdict=self._last_verdict,
+                prev_action=self._last_action,
+                corrected_after_warning=corrected_after_warning,
+                repeated_after_warning=repeated_after_warning,
+                elapsed_seconds=round(summary["elapsed_seconds"], 1),
             )
+
+            self._last_verdict = result.verdict.value
+            self._last_action = action
+            self._last_rule = result.rule
 
             if result.verdict == V.PERMIT:
                 return {"continue": True, "permission": "allow"}
@@ -508,7 +533,14 @@ class Daemon:
         if event in ("stop", "sessionEnd"):
             if self.engine:
                 summary = self.engine.get_session_summary()
-                self.obs.log("session_end", **summary)
+                # Compute Phase 0 session-level metrics
+                total_evals = summary["total_actions"]
+                interventions = summary["warnings"] + summary["blocks"]
+                self.obs.log(
+                    "session_end",
+                    silent_session=(interventions == 0 and total_evals > 0),
+                    **summary,
+                )
             self.write_session_checkpoint()
             return {"continue": True, "_shutdown": True}
 
