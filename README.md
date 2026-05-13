@@ -1,60 +1,62 @@
 # Viveka
 
-Cognitive governance for AI agents. One reasoning posture, deterministic enforcement, decision tools.
+The only Cursor plugin that governs both native tools and MCP tools. 16ms per action. 1,078 tokens for simple tasks. Hook+MCP hybrid scoring 43/48 on the ACP governance benchmark.
 
-**Essence:** Viveka is a cognitive posture that produces healthy outputs through context-awareness, structural decomposition, and live coherence.
+## What It Does
 
-## Three Layers, One Install
+Viveka evaluates every agent action before it executes. File edits, shell commands, tool calls — all pass through a deterministic decision engine. No LLM cost. No network calls. No API keys.
 
-Viveka ships as a single Cursor plugin with three integration layers:
+Every action gets one of four verdicts:
 
-**Layer 1 — Cognitive Posture** (rules, skills, agents). Shapes how the agent reasons. Six-stage pipeline, four postures, four sub-agents, twelve skills. Works immediately on install. No dependencies.
+- **Permit** — proceed silently.
+- **Warn** — proceed, flag the concern to the agent.
+- **Block** — stop the action, explain why, suggest alternatives.
+- **Escalate** — pause and ask the human to decide.
 
-**Layer 2 — Enforcement** (hooks). A deterministic micro-decision engine evaluates every tool call, shell command, and file edit. Permits, warns, blocks, or escalates to the user. No LLM cost. Runs in milliseconds. Requires Python 3.10+.
+## What It Catches
 
-**Layer 3 — Decision Tools** (MCP server). Exposes 10 governance tools the agent can call: action checks, memory read/write, session state, posture updates, constraint validation, adversarial scenarios, policy packs, and session trace export. All local, all deterministic. Requires Python 3.10+.
+| Problem | How | When |
+|---------|-----|------|
+| Force-push to main/production | Git branch detection | Always blocked |
+| `rm -rf`, `drop table`, `reset --hard` | Destructive command patterns | Blocked in guarded/restricted mode |
+| Agent retrying the same failing command | Per-action retry counter | Blocked after 3 attempts (configurable) |
+| Scope creep (editing 20 files for a "fix one bug" task) | File-modified counter | Warned at limit, blocked at overshoot |
+| Runaway agent loops | Total action counter | Escalated to human at 100 actions |
+| Secret exposure (.env, API keys, tokens) | Path/content pattern matching | Warned on access |
+| Accumulated ignored warnings | Warning counter | Escalated when agent stops responding to signals |
 
-```
-┌─────────────────────────────────────────┐
-│  Layer 1: Cognitive Posture             │  rules/ skills/ agents/
-│  "How should I think about this?"       │  Prompt-based, always active
-├─────────────────────────────────────────┤
-│  Layer 2: Enforcement                   │  hooks/ → runtime/
-│  "Is this action permitted?"            │  Deterministic, hook-enforced
-├─────────────────────────────────────────┤
-│  Layer 3: Decision Tools                │  mcp-server/ → runtime/
-│  "What does governance say?"            │  Agent-callable, local only
-├─────────────────────────────────────────┤
-│  Cursor Platform                        │  Tool execution, context mgmt
-└─────────────────────────────────────────┘
-```
+## What It Ships
+
+| Component | Count | Purpose |
+|-----------|-------|---------|
+| Reasoning kernel | 1 | Lean system prompt — six-stage pipeline, four postures, decision gates |
+| Skills | 12 | On-demand depth: context mapping, architecture, code, research, review, etc. |
+| Sub-agents | 4 | Isolated execution: code, research, doc-review, adversarial |
+| Hook events | 5 | preToolUse, beforeShellExecution, afterFileEdit, sessionStart, stop |
+| MCP tools | 10 | Action checks, memory, session state, posture, constraints, scenarios, policies, trace |
+| Policy packs | 5 | Pre-built governance for hotfixes, refactors, migrations, incidents, cleanup |
 
 ## Install
 
-### Tier 1 — Plugin only (zero dependencies)
-
-Install from Cursor Marketplace, or:
+### Option A — Plugin only (zero dependencies)
 
 ```bash
 mkdir -p ~/.cursor/plugins/local
 ln -s /path/to/viveka ~/.cursor/plugins/local/viveka
 ```
 
-Restart Cursor. Layer 1 (cognitive posture) is immediately active. Layers 2 and 3 require Python.
+Restart Cursor. The reasoning kernel and skills activate immediately.
 
-### Tier 2 — Full governance (Python 3.10+)
-
-The plugin includes the runtime. If Python 3.10+ is available, hooks and MCP tools activate automatically.
+### Option B — Full governance (Python 3.10+)
 
 ```bash
-pip install pydantic   # required for Layers 2-3 (models/core.py)
+pip install pydantic
 ```
 
-Verify it works: open a Cursor session and check for `viveka` in the MCP tools list (Cmd+Shift+P → "MCP: List Tools").
+If Python 3.10+ and pydantic are available, hooks and MCP tools activate automatically on next session start. Verify: Cmd+Shift+P → "MCP: List Tools" → look for `viveka`.
 
 ### Claude Code
 
-Copy the system prompt to your project:
 ```bash
 cp /path/to/viveka/CLAUDE.md /your/project/CLAUDE.md
 ```
@@ -65,106 +67,87 @@ Copy content from `platforms/chat/preferences.md` into Settings → User Prefere
 
 ## Architecture
 
-### The Six Stages
+```
+┌─────────────────────────────────────────┐
+│  Reasoning Kernel                       │  rules/ skills/ agents/
+│  Shapes how the agent thinks            │  Prompt-based, always active
+├─────────────────────────────────────────┤
+│  Enforcement (Hooks → Daemon)           │  hooks/ scripts/ → runtime/
+│  Gates every action before execution    │  Deterministic, 16ms round-trip
+├─────────────────────────────────────────┤
+│  Decision Tools (MCP Server)            │  mcp-server/ → runtime/
+│  Agent-callable governance tools        │  10 tools, all local, all free
+├─────────────────────────────────────────┤
+│  Cursor Platform                        │  Tool execution, context mgmt
+└─────────────────────────────────────────┘
+```
 
-1. **Context** — Map environment, constraints, tools, memory. Search `.viveka/memory/` before assuming.
-2. **Grasping** — Understand fully, simulate scenarios, evaluate by value equation. Decision gate: proceed or present.
-3. **Architecture** — Essence → foundation → scope → sequence → detail → surface aesthetics. Dependency order.
-4. **Execution** — Plan roadmap, delegate under inter-agent contracts, live review. Loop back when wrong (max 3).
-5. **Review** — Health, bugs, coherence, sufficiency. Trace the journey from essence to output.
-6. **Catalogue** — Insights, patterns, bugs, loop-backs, correction rules. Written to `.viveka/memory/`.
+### Enforcement: Hooks + Daemon
 
-### Postures
+Cursor fires a hook on every tool call, shell command, and file edit. The hook sends the event to a persistent background daemon over a Unix socket. The daemon holds the decision engine warm in memory — one-time startup cost, then ~0.01ms per evaluation.
 
-- **Standard** (default) — the protocol as written.
-- **Exploratory** — defers Architecture, increases lateral generation. For ideation.
-- **Speed** — compresses stages, defers Catalogue. For triage.
-- **Adversarial** — deepens Review, mandatory hostile-input simulation. For high-stakes work.
+The daemon computes a risk mode from the environment (branch, dirty state, available tools) and task context (intent, reversibility, urgency). Four modes: permissive, standard, guarded, restricted. Each mode sets limits on retries, file count, and action count.
 
-Three invariants hold across all postures: essence adherence, irreversible-action gate, review requirement.
+Each Cursor window gets its own daemon, keyed by working directory. Two projects open in parallel never share state.
 
-### Sub-agents
+Hooks fail-open: if the daemon is unreachable, actions proceed. The reasoning kernel continues to guide the agent.
 
-Four sub-agents activate when task type and scale warrant isolation:
+### Decision Tools: MCP Server
 
-- **viveka-code-agent** — coding work of meaningful size (multi-file, >50 lines, test execution).
-- **viveka-research-agent** — substantial research with read-only tools.
-- **viveka-doc-review-agent** — long document review (>3000 words) in isolated context.
-- **viveka-adversarial** — posture-driven. Deepened review, mandatory kill-case analysis.
+Ten tools the agent can call voluntarily:
 
-Activation is type-driven: no-agent (default) / auto-deploy / ask-first / user-requested.
+| Tool | What it does |
+|------|-------------|
+| `viveka_check` | Evaluate a proposed action against the governance engine |
+| `viveka_memory_read` | Search past task memories and correction rules |
+| `viveka_memory_write` | Persist insights for future sessions |
+| `viveka_session_state` | Read current risk mode, posture, and governance context |
+| `viveka_status` | Health check across all layers |
+| `viveka_update_posture` | Switch cognitive posture mid-session (syncs to daemon) |
+| `viveka_constraint_check` | Validate text against hard constraints |
+| `viveka_scenarios` | Get adversarial failure scenarios for the current context |
+| `viveka_policies` | List available policy packs |
+| `viveka_session_trace` | Export the full decision chain for the session |
 
-### Enforcement (Hooks)
+The MCP server routes through the daemon when available (preserving session history). Falls back to standalone evaluation if the daemon is down.
 
-The micro-decision engine runs as Cursor hooks on these events:
+### Reasoning Kernel
 
-- `preToolUse` — evaluates every tool call before execution
-- `beforeShellExecution` — gates shell commands (blocks destructive ops)
-- `afterFileEdit` — post-edit audit
-- `sessionStart` — initializes governance context
-- `stop` — cleanup
+A lean system prompt that shapes agent behavior:
 
-The engine is deterministic: regex rules, pattern matching, state tracking. No LLM calls. Actions receive one of four verdicts: **permit** (proceed), **warn** (proceed with flag), **block** (stop, explain why), **escalate** (ask the user).
+- **Four postures** — Standard, Exploratory (defer structure, widen search), Speed (compress stages), Adversarial (mandatory hostile-input sim).
+- **Twelve skills** — loaded on-demand when task complexity warrants depth. Context mapping, architecture, code, research, writing, design, review, diagnosis, and more.
+- **Four sub-agents** — auto-deploy for multi-file code changes, structured research, long document review, and adversarial analysis.
+- **Decision gates** — every stage transition uses the same permit/warn/block/escalate vocabulary as enforcement.
 
-Hooks fail-open: if Python is unavailable, all actions proceed. The cognitive layer still guides reasoning.
+### Policy Packs
 
-### Decision Tools (MCP)
+Named governance configurations for specific workflows:
 
-Ten MCP tools available when the server is running:
+| Pack | Mode | File limit | Retry limit | Key constraint |
+|------|------|-----------|-------------|----------------|
+| `production-hotfix` | Restricted | 3 | 1 | Human approval required |
+| `refactor-safe` | Standard | 15 | 3 | Tests required before deploy |
+| `data-migration` | Guarded | 10 | 2 | Backup required, DROP/TRUNCATE blocked |
+| `incident-response` | Restricted | 2 | 1 | Human approval required |
+| `cleanup` | Standard | 20 | 3 | Check dynamic import references |
 
-| Tool | What it does | Cost |
-|------|-------------|------|
-| `viveka_check` | Governance check for a proposed action | Zero (deterministic) |
-| `viveka_memory_read` | Search past task memories and framework rules | Zero (file I/O) |
-| `viveka_memory_write` | Persist task memory for future sessions | Zero (file I/O) |
-| `viveka_session_state` | Read current risk mode and governance context | Zero (file read) |
-| `viveka_status` | Layer health check (daemon, MCP, session) | Zero |
-| `viveka_update_posture` | Change cognitive posture mid-session, sync to daemon | Zero |
-| `viveka_constraint_check` | Validate text against hard constraints | Zero (keyword) |
-| `viveka_scenarios` | Get adversarial failure scenarios for current mode | Zero |
-| `viveka_policies` | List available governance PolicyPacks | Zero |
-| `viveka_session_trace` | Export full governed session decision chain | Zero |
+Custom packs: drop a YAML file in `~/.viveka/policies/`.
 
-### Memory
+## Session Lifecycle
 
-Two tiers:
-
-- `.viveka/memory/` — per-task memory. Insights, loop-backs, correction rules from a single task.
-- `.viveka/framework-memory/` — promoted rules. When the same correction rule recurs across tasks, it enters a supervised promotion pipeline: candidate → contradiction check → human review → merge.
-
-Memory is read at the start of every task (via `viveka_memory_read` or manual search). Framework-memory active rules first, then task-memory correction rules, then loop-back records.
-
-## Skills
-
-| Skill | Triggers on |
-|-------|------------|
-| viveka-context | Complex environment mapping, unfamiliar codebase |
-| viveka-grasp | Multiple viable approaches, significant stakes |
-| viveka-architect | Compound outputs needing structural design |
-| viveka-execute | Multi-agent delegation, long builds, drift risk |
-| viveka-review | Significant deliverables needing examination |
-| viveka-catalogue | Post-task learning capture |
-| viveka-code | Source code output |
-| viveka-writing | Prose output |
-| viveka-research | Information finding and synthesis |
-| viveka-design | Visual/UX output |
-| viveka-decide | Decision support without artifact production |
-| viveka-diagnose | Debugging, root-cause analysis |
-
-## Cross-cutting
-
-- **Cost as signal** — 70% context consumed → narrow scope. 90% → escalate or terminate.
-- **Confidence calibration** — epistemic vs aleatory. Propagation rule: output confidence <= lowest input confidence.
-- **Generation-vs-reasoning trip wire** — high confidence + thin evidence → stop and search.
-- **Stage audit trail** — posture, switches, agent activations, stages entered/skipped, loop-backs.
-- **Bounded loop-backs** — max 3 returns to upstream stages. Thrash detection.
+1. **Start** — daemon spawns, scans git, computes risk mode, loads policy. ~1s.
+2. **Work** — every action evaluated in 16ms. Most permitted silently. Warnings, blocks, escalations when warranted.
+3. **End** — checkpoint written to `.viveka/checkpoints/` (audit trail). Daemon exits. If Cursor crashes, 5-minute idle timeout handles cleanup.
 
 ## Dependencies
 
-Viveka requires no API keys, no accounts, no network access. The cognitive layer (Layer 1) has zero dependencies. Layers 2 and 3 require Python 3.10+ with `pydantic` installed (`pip install pydantic`). The enforcement engine is deterministic Python. The decision tools are local file I/O. The cognitive reasoning runs in whatever model the platform provides.
+- **Kernel only:** Zero. No Python, no packages, no network.
+- **Full governance:** Python 3.10+ and `pydantic`. No API keys, no accounts, no network access.
 
-## Origin
+## Links
 
-Viveka (विवेक) — Sanskrit for discriminative wisdom: the capacity to distinguish what is real from what is apparent, what is essential from what is incidental.
+- [How Viveka Governs](docs/how-viveka-governs.md) — detailed runtime explainer for non-technical readers
+- [Philosophy](PHILOSOPHY.md) — the six stages, postures, cross-cutting principles, and design rationale
 
 *MIT License. Built by [Chinmay Bhandari](https://github.com/Chiinmay159)*

@@ -1,0 +1,947 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>How Viveka Governs: The Runtime, Explained</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;0,9..144,600;0,9..144,700;1,9..144,400&family=Source+Serif+4:ital,opsz,wght@0,8..60,300;0,8..60,400;0,8..60,500;0,8..60,600;1,8..60,400&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      /* √2 spacing scale */
+      --sp-xs: 12px;
+      --sp-sm: 17px;
+      --sp-md: 24px;
+      --sp-lg: 35px;
+      --sp-xl: 50px;
+      --sp-2xl: 70px;
+      --sp-3xl: 100px;
+
+      /* Colour system */
+      --bg: #FAF9F6;
+      --bg-alt: #F2F0EC;
+      --bg-code: #EDEAE5;
+      --text: #1C1C1C;
+      --text-secondary: #4A4742;
+      --text-tertiary: #7A756D;
+      --accent: #2B5544;
+      --accent-light: #3A7A5E;
+      --border: #D5D0C8;
+      --border-light: #E5E1DA;
+      --table-stripe: #F5F3EF;
+      --highlight: #E8F0EB;
+
+      /* Typography */
+      --font-display: 'Fraunces', Georgia, serif;
+      --font-body: 'Source Serif 4', Georgia, serif;
+      --font-mono: 'IBM Plex Mono', monospace;
+
+      /* √2 type scale */
+      --fs-xs: 13px;
+      --fs-sm: 15px;
+      --fs-base: 17px;
+      --fs-md: 20px;
+      --fs-lg: 24px;
+      --fs-xl: 34px;
+      --fs-2xl: 42px;
+      --fs-3xl: 56px;
+
+      /* Layout */
+      --content-width: 720px;
+      --sidebar-width: 220px;
+    }
+
+    *, *::before, *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    html {
+      scroll-behavior: smooth;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
+
+    body {
+      font-family: var(--font-body);
+      font-size: var(--fs-base);
+      line-height: 1.7;
+      color: var(--text);
+      background: var(--bg);
+    }
+
+    /* ---- LAYOUT ---- */
+    .page {
+      display: flex;
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: var(--sp-xl) var(--sp-md);
+      gap: var(--sp-2xl);
+    }
+
+    .sidebar {
+      position: sticky;
+      top: var(--sp-xl);
+      align-self: flex-start;
+      width: var(--sidebar-width);
+      flex-shrink: 0;
+      padding-top: var(--sp-lg);
+    }
+
+    .sidebar-label {
+      font-family: var(--font-mono);
+      font-size: var(--fs-xs);
+      font-weight: 500;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--text-tertiary);
+      margin-bottom: var(--sp-sm);
+    }
+
+    .sidebar nav a {
+      display: block;
+      font-family: var(--font-body);
+      font-size: var(--fs-sm);
+      color: var(--text-tertiary);
+      text-decoration: none;
+      padding: 5px 0 5px var(--sp-sm);
+      border-left: 2px solid transparent;
+      transition: color 0.2s, border-color 0.2s;
+      line-height: 1.45;
+      margin-bottom: 2px;
+    }
+
+    .sidebar nav a:hover {
+      color: var(--text);
+    }
+
+    .sidebar nav a.active {
+      color: var(--accent);
+      border-left-color: var(--accent);
+      font-weight: 500;
+    }
+
+    .content {
+      max-width: var(--content-width);
+      flex: 1;
+      min-width: 0;
+    }
+
+    /* ---- HEADER ---- */
+    .doc-header {
+      margin-bottom: var(--sp-3xl);
+      padding-bottom: var(--sp-xl);
+      border-bottom: 1px solid var(--border);
+    }
+
+    .doc-eyebrow {
+      font-family: var(--font-mono);
+      font-size: var(--fs-xs);
+      font-weight: 500;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--accent);
+      margin-bottom: var(--sp-sm);
+    }
+
+    .doc-title {
+      font-family: var(--font-display);
+      font-size: var(--fs-2xl);
+      font-weight: 600;
+      line-height: 1.15;
+      color: var(--text);
+      margin-bottom: var(--sp-md);
+      letter-spacing: -0.01em;
+    }
+
+    .doc-subtitle {
+      font-family: var(--font-body);
+      font-size: var(--fs-md);
+      font-weight: 300;
+      color: var(--text-secondary);
+      line-height: 1.55;
+      max-width: 600px;
+    }
+
+    /* ---- SECTIONS ---- */
+    section {
+      margin-bottom: var(--sp-3xl);
+    }
+
+    section:last-of-type {
+      margin-bottom: var(--sp-xl);
+    }
+
+    h2 {
+      font-family: var(--font-display);
+      font-size: var(--fs-lg);
+      font-weight: 600;
+      color: var(--text);
+      margin-bottom: var(--sp-md);
+      line-height: 1.25;
+      letter-spacing: -0.005em;
+    }
+
+    h3 {
+      font-family: var(--font-display);
+      font-size: var(--fs-md);
+      font-weight: 600;
+      color: var(--text);
+      margin-top: var(--sp-xl);
+      margin-bottom: var(--sp-sm);
+      line-height: 1.3;
+    }
+
+    p {
+      margin-bottom: var(--sp-md);
+    }
+
+    p:last-child {
+      margin-bottom: 0;
+    }
+
+    /* ---- TABLES ---- */
+    .table-wrap {
+      margin: var(--sp-lg) 0;
+      overflow-x: auto;
+      border-radius: 4px;
+      border: 1px solid var(--border-light);
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: var(--fs-sm);
+      line-height: 1.55;
+    }
+
+    thead th {
+      font-family: var(--font-mono);
+      font-size: var(--fs-xs);
+      font-weight: 500;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      text-align: left;
+      padding: var(--sp-sm) var(--sp-md);
+      background: var(--bg-alt);
+      color: var(--text-secondary);
+      border-bottom: 1px solid var(--border);
+      white-space: nowrap;
+    }
+
+    tbody td {
+      padding: var(--sp-xs) var(--sp-md);
+      border-bottom: 1px solid var(--border-light);
+      vertical-align: top;
+    }
+
+    tbody tr:last-child td {
+      border-bottom: none;
+    }
+
+    tbody tr:nth-child(even) {
+      background: var(--table-stripe);
+    }
+
+    td:first-child {
+      font-weight: 500;
+      color: var(--accent);
+      white-space: nowrap;
+    }
+
+    /* ---- INLINE CODE & TECHNICAL TERMS ---- */
+    code {
+      font-family: var(--font-mono);
+      font-size: 0.88em;
+      background: var(--bg-code);
+      padding: 2px 6px;
+      border-radius: 3px;
+      color: var(--text);
+    }
+
+    /* ---- LISTS ---- */
+    ul, ol {
+      margin: var(--sp-sm) 0 var(--sp-md) var(--sp-md);
+    }
+
+    li {
+      margin-bottom: 8px;
+      padding-left: 4px;
+    }
+
+    li::marker {
+      color: var(--accent);
+    }
+
+    /* ---- DIVIDER ---- */
+    hr {
+      border: none;
+      border-top: 1px solid var(--border-light);
+      margin: var(--sp-2xl) 0;
+    }
+
+    /* ---- CALLOUT ---- */
+    .callout {
+      background: var(--highlight);
+      border-left: 3px solid var(--accent);
+      padding: var(--sp-md) var(--sp-lg);
+      margin: var(--sp-lg) 0;
+      border-radius: 0 4px 4px 0;
+      font-size: var(--fs-sm);
+      line-height: 1.65;
+    }
+
+    .callout p {
+      margin-bottom: var(--sp-xs);
+    }
+
+    .callout p:last-child {
+      margin-bottom: 0;
+    }
+
+    /* ---- NUMBERED RULE LIST ---- */
+    .rule-list {
+      counter-reset: rule-counter;
+      list-style: none;
+      margin-left: 0;
+      padding: 0;
+    }
+
+    .rule-list li {
+      counter-increment: rule-counter;
+      position: relative;
+      padding-left: var(--sp-lg);
+      margin-bottom: var(--sp-md);
+      padding-bottom: var(--sp-md);
+      border-bottom: 1px solid var(--border-light);
+    }
+
+    .rule-list li:last-child {
+      border-bottom: none;
+      padding-bottom: 0;
+      margin-bottom: 0;
+    }
+
+    .rule-list li::before {
+      content: counter(rule-counter);
+      position: absolute;
+      left: 0;
+      top: 2px;
+      font-family: var(--font-display);
+      font-size: var(--fs-md);
+      font-weight: 600;
+      color: var(--accent);
+      line-height: 1;
+    }
+
+    .rule-title {
+      font-weight: 600;
+      color: var(--text);
+    }
+
+    /* ---- FOOTER ---- */
+    .doc-footer {
+      margin-top: var(--sp-3xl);
+      padding-top: var(--sp-xl);
+      border-top: 1px solid var(--border);
+      font-size: var(--fs-sm);
+      color: var(--text-tertiary);
+      line-height: 1.6;
+    }
+
+    /* ---- SECTION ANCHOR ---- */
+    .section-anchor {
+      display: block;
+      position: relative;
+      top: -70px;
+      visibility: hidden;
+    }
+
+    /* ---- RESPONSIVE ---- */
+    @media (max-width: 900px) {
+      .page {
+        flex-direction: column;
+        padding: var(--sp-lg) var(--sp-md);
+        gap: 0;
+      }
+
+      .sidebar {
+        position: static;
+        width: 100%;
+        padding: 0 0 var(--sp-lg) 0;
+        margin-bottom: var(--sp-lg);
+        border-bottom: 1px solid var(--border-light);
+      }
+
+      .sidebar nav {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 4px var(--sp-sm);
+      }
+
+      .sidebar nav a {
+        padding: 4px 10px;
+        border-left: none;
+        font-size: var(--fs-xs);
+        border-radius: 3px;
+      }
+
+      .sidebar nav a.active {
+        background: var(--highlight);
+        border-left: none;
+      }
+
+      .doc-title {
+        font-size: var(--fs-xl);
+      }
+
+      section {
+        margin-bottom: var(--sp-2xl);
+      }
+
+      .table-wrap {
+        font-size: var(--fs-xs);
+      }
+    }
+
+    @media (max-width: 600px) {
+      :root {
+        --fs-base: 16px;
+      }
+
+      .doc-title {
+        font-size: 28px;
+      }
+
+      .table-wrap {
+        margin-left: calc(-1 * var(--sp-md));
+        margin-right: calc(-1 * var(--sp-md));
+        border-radius: 0;
+        border-left: none;
+        border-right: none;
+      }
+    }
+
+    /* Print */
+    @media print {
+      .sidebar { display: none; }
+      .page { max-width: 100%; padding: 0; }
+      body { font-size: 11pt; }
+      section { break-inside: avoid; }
+    }
+  </style>
+</head>
+<body>
+
+<div class="page">
+
+  <!-- Sidebar TOC -->
+  <aside class="sidebar">
+    <div class="sidebar-label">Contents</div>
+    <nav>
+      <a href="#core-idea">The Core Idea</a>
+      <a href="#the-vocabulary">The Vocabulary</a>
+      <a href="#hooks">Hooks</a>
+      <a href="#daemon">Daemon</a>
+      <a href="#mcp-server">MCP Server</a>
+      <a href="#together">How They Work Together</a>
+      <a href="#isolation">Per-Project Isolation</a>
+      <a href="#fail-open">The Safety Philosophy</a>
+      <a href="#boundaries">What Viveka Does Not Do</a>
+      <a href="#summary">Summary</a>
+    </nav>
+  </aside>
+
+  <!-- Main Content -->
+  <main class="content">
+
+    <header class="doc-header">
+      <div class="doc-eyebrow">Viveka / Architecture</div>
+      <h1 class="doc-title">How Viveka Governs:<br>The Runtime, Explained</h1>
+      <p class="doc-subtitle">
+        The three runtime components that power Viveka's enforcement: what they do, why they exist, and how they compose into a governance layer that stays invisible until it matters.
+      </p>
+    </header>
+
+    <!-- Section: Core Idea -->
+    <section>
+      <span class="section-anchor" id="core-idea"></span>
+      <h2>The Core Idea</h2>
+
+      <p>
+        When an AI agent works inside a code editor, it takes actions: editing files, running commands, searching code. Most of these actions are fine. Some are risky. A few are dangerous.
+      </p>
+
+      <p>
+        Viveka sits between the agent and these actions. Before the agent can do something, Viveka evaluates it. The evaluation is instant, deterministic (same input always produces the same output), and costs nothing. No AI calls. No cloud services. No API keys.
+      </p>
+    </section>
+
+    <!-- Section: Vocabulary -->
+    <section>
+      <span class="section-anchor" id="the-vocabulary"></span>
+      <h2>The Vocabulary</h2>
+
+      <p>
+        Every evaluation produces one of four outcomes. These four outcomes are the universal vocabulary across all of Viveka. Every component speaks in these terms.
+      </p>
+
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Outcome</th>
+              <th>What Happens</th>
+              <th>Example</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Permit</td>
+              <td>The action proceeds silently.</td>
+              <td>Reading a file. Writing a test.</td>
+            </tr>
+            <tr>
+              <td>Warn</td>
+              <td>The action proceeds, but the agent sees a caution note.</td>
+              <td>Editing the 14th file when the limit is 15. Touching a file that might contain secrets.</td>
+            </tr>
+            <tr>
+              <td>Block</td>
+              <td>The action is stopped. The agent is told why and given alternatives.</td>
+              <td>Running <code>rm -rf</code> on a protected branch. Retrying the same failing command for the 4th time.</td>
+            </tr>
+            <tr>
+              <td>Escalate</td>
+              <td>The action is paused and the human is asked to decide.</td>
+              <td>A destructive command on production data. The agent ignoring repeated warnings.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <hr>
+
+    <!-- Section: Hooks -->
+    <section>
+      <span class="section-anchor" id="hooks"></span>
+      <h2>1. Hooks: The Checkpoint</h2>
+
+      <p>
+        Think of hooks as security checkpoints at an airport. Every passenger must pass through. The checkpoint does not make the rules. It sends each passenger to the people who do.
+      </p>
+
+      <p>
+        The code editor (Cursor) has a built-in hook system. Viveka registers for five events:
+      </p>
+
+      <ul>
+        <li><strong>Session start</strong> &mdash; the editor opens a project</li>
+        <li><strong>Before tool use</strong> &mdash; the agent is about to use a tool (edit a file, create something)</li>
+        <li><strong>Before shell command</strong> &mdash; the agent is about to run a terminal command</li>
+        <li><strong>After file edit</strong> &mdash; a file was just modified (for record-keeping, not blocking)</li>
+        <li><strong>Session stop</strong> &mdash; the editor is closing</li>
+      </ul>
+
+      <p>
+        When any of these events fire, the editor calls Viveka's hook script. The script is a thin, fast messenger: it takes the event details, sends them to the daemon, and relays the response back to the editor. The entire round trip takes about 8 milliseconds.
+      </p>
+
+      <div class="callout">
+        <p><strong>What if the hook fails?</strong> The action proceeds. Viveka is designed to never accidentally lock up the editor. If something goes wrong with the hook infrastructure, the agent continues working normally. The thinking layer, the cognitive posture that shapes how the agent reasons, remains active regardless.</p>
+      </div>
+    </section>
+
+    <!-- Section: Daemon -->
+    <section>
+      <span class="section-anchor" id="daemon"></span>
+      <h2>2. Daemon: The Decision Maker</h2>
+
+      <p>
+        The daemon is the brain of the enforcement system. It is a background process that starts when the editor opens a project and stays alive for the entire session.
+      </p>
+
+      <p>
+        Loading the decision engine requires importing libraries and scanning the project environment, about half a second of setup time. If this happened on every single action, the editor would feel sluggish: 500ms of delay on every file save, every command run. The daemon pays this cost once at startup. After that, each evaluation takes about 0.01 milliseconds. Essentially instant.
+      </p>
+
+      <h3>What Happens at Startup</h3>
+
+      <p>
+        The daemon reads the project directory and detects the environment. Which branch is checked out? Is it a protected branch (main, master, production, release)? Are there uncommitted changes? What tools are available (Git, Python, Docker)?
+      </p>
+
+      <p>
+        It reads the task description and detects intent. Words like "fix" or "bug" signal a fix. Words like "refactor" or "optimize" signal an improvement. Words like "explore" or "prototype" signal exploration.
+      </p>
+
+      <p>
+        From the environment scan and task context, it computes a <strong>risk score</strong>. A routine development task scores low. Working on a protected branch scores higher. Production work with irreversible consequences scores highest.
+      </p>
+
+      <p>
+        The risk score determines the <strong>enforcement mode</strong>, which governs how strict the rules are.
+      </p>
+
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Mode</th>
+              <th>When</th>
+              <th>File Limit</th>
+              <th>Retry Limit</th>
+              <th>Stance</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Permissive</td>
+              <td>Exploration, prototyping</td>
+              <td>30 files</td>
+              <td>5 retries</td>
+              <td>Trust the agent</td>
+            </tr>
+            <tr>
+              <td>Standard</td>
+              <td>Normal development</td>
+              <td>15 files</td>
+              <td>3 retries</td>
+              <td>Balanced</td>
+            </tr>
+            <tr>
+              <td>Guarded</td>
+              <td>Protected branches, sensitive code</td>
+              <td>8 files</td>
+              <td>2 retries</td>
+              <td>Verify before allowing</td>
+            </tr>
+            <tr>
+              <td>Restricted</td>
+              <td>Production, incidents</td>
+              <td>3 files</td>
+              <td>1 retry</td>
+              <td>Block unless clearly safe</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p>
+        If the project has a policy file (a pre-defined set of rules for specific workflows like hotfixes or data migrations), the daemon loads and applies it.
+      </p>
+
+      <h3>The Seven Rules</h3>
+
+      <p>
+        On every action, the daemon evaluates seven rules. These are the complete set. Nothing is evaluated outside them.
+      </p>
+
+      <ol class="rule-list">
+        <li>
+          <span class="rule-title">Hard invariants.</span> Is the agent trying to force-push to main? Delete a protected path? Use a blocked tool? These are always blocked, regardless of mode.
+        </li>
+        <li>
+          <span class="rule-title">Secret exposure.</span> Does the action reference files that typically contain secrets (<code>.env</code>, API keys, passwords)? If so, warn.
+        </li>
+        <li>
+          <span class="rule-title">Retry loops.</span> Has the agent tried this exact action before? The same command failing three times in a row suggests the approach is wrong, not that it needs one more try. Block after the limit.
+        </li>
+        <li>
+          <span class="rule-title">Scope creep.</span> Has the agent modified more files than expected for this task? A "fix one bug" task that touches 20 files is probably drifting. Warn as it approaches the limit.
+        </li>
+        <li>
+          <span class="rule-title">Destructive actions.</span> Commands like <code>rm -rf</code>, <code>drop table</code>, <code>reset --hard</code> get special scrutiny. In stricter modes, they are blocked outright. In permissive mode, they are warned.
+        </li>
+        <li>
+          <span class="rule-title">Token budget.</span> If a cost budget was set for the session, warn when approaching it and block when exhausted.
+        </li>
+        <li>
+          <span class="rule-title">Session health.</span> If the agent has accumulated many warnings without changing behaviour, escalate to the human. If total actions exceed the session limit, escalate. A possible runaway loop.
+        </li>
+      </ol>
+
+      <h3>Session Memory</h3>
+
+      <p>
+        The daemon remembers everything within a session. It tracks which files were modified, which actions were taken, how many warnings were issued, how many times each action was retried. This accumulated context is what makes the behavioural rules (retry detection, scope creep, session health) possible. Without memory, each action would be evaluated in isolation. The patterns that matter most, the ones that signal drift, would be invisible.
+      </p>
+
+      <h3>Session End and Cleanup</h3>
+
+      <p>
+        If the session had meaningful activity (three or more actions), the daemon writes a checkpoint file to the project. This checkpoint records what happened: which files were touched, how many actions were taken, how many were warned or blocked, and the full decision trace. This creates an audit trail.
+      </p>
+
+      <div class="callout">
+        <p><strong>Idle timeout.</strong> If the editor closes without a clean shutdown (force-quit, crash), no stop event fires. The daemon has a 5-minute idle timer: if no requests arrive for 5 minutes, it writes the checkpoint and shuts itself down. This prevents abandoned processes from accumulating on the system.</p>
+      </div>
+    </section>
+
+    <!-- Section: MCP Server -->
+    <section>
+      <span class="section-anchor" id="mcp-server"></span>
+      <h2>3. MCP Server: The Agent's Advisor</h2>
+
+      <p>
+        The hooks and daemon work automatically. The agent has no say in whether they fire. The MCP server is different. It provides tools that the agent can voluntarily call to ask governance questions.
+      </p>
+
+      <p>
+        The daemon is a traffic light: automatic, mandatory. The MCP server is a navigation app: optional, advisory, but useful.
+      </p>
+
+      <p>
+        The MCP server provides ten tools:
+      </p>
+
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Tool</th>
+              <th>What the Agent Asks</th>
+              <th>What It Gets Back</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Check</td>
+              <td>"Is this action safe to take?"</td>
+              <td>A permit/warn/block/escalate verdict with reasoning</td>
+            </tr>
+            <tr>
+              <td>Memory Read</td>
+              <td>"Has anything relevant been learned in past sessions?"</td>
+              <td>Past task memories, correction rules, framework insights</td>
+            </tr>
+            <tr>
+              <td>Memory Write</td>
+              <td>"I learned something worth remembering."</td>
+              <td>Saves the insight for future sessions</td>
+            </tr>
+            <tr>
+              <td>Session State</td>
+              <td>"What's my current governance context?"</td>
+              <td>Current risk mode, posture, task description, working directory</td>
+            </tr>
+            <tr>
+              <td>Status</td>
+              <td>"Is the governance system healthy?"</td>
+              <td>Layer-by-layer health check</td>
+            </tr>
+            <tr>
+              <td>Update Posture</td>
+              <td>"I need to switch to Adversarial mode."</td>
+              <td>Updates enforcement immediately</td>
+            </tr>
+            <tr>
+              <td>Constraint Check</td>
+              <td>"Does this text violate any hard constraints?"</td>
+              <td>List of violations found</td>
+            </tr>
+            <tr>
+              <td>Scenarios</td>
+              <td>"What could go wrong with this approach?"</td>
+              <td>Applicable failure scenarios for the current context</td>
+            </tr>
+            <tr>
+              <td>Policies</td>
+              <td>"What governance policies are available?"</td>
+              <td>List of named policy packs with their rules</td>
+            </tr>
+            <tr>
+              <td>Session Trace</td>
+              <td>"Show me every decision made this session."</td>
+              <td>Complete action-by-action history</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p>
+        When the agent calls a tool like "Check," the MCP server first tries to send the request to the daemon over the same connection the hooks use. This matters. The daemon holds the full session history: files modified, retries counted, warnings accumulated. A fresh evaluation without that history would miss behavioural patterns. If the daemon is unavailable, the MCP server falls back to running its own evaluation, but without session history.
+      </p>
+    </section>
+
+    <hr>
+
+    <!-- Section: Together -->
+    <section>
+      <span class="section-anchor" id="together"></span>
+      <h2>How They Work Together</h2>
+
+      <p>
+        Here is what happens during a typical work session, start to finish.
+      </p>
+
+      <h3>Opening the Project</h3>
+      <p>
+        The editor fires the session start event. The hook script starts the daemon. The daemon scans the environment, computes the risk level, and signals that it is ready. The MCP server starts alongside it. Total time: about 1 to 2 seconds.
+      </p>
+
+      <h3>The Agent Works</h3>
+      <p>
+        The agent reads files, writes code, runs tests. Every action passes through the hook checkpoint, reaches the daemon, gets evaluated in microseconds, and receives a verdict. Most actions are permitted silently. The agent does not even know governance is running. It just works without friction.
+      </p>
+
+      <h3>Something Risky Happens</h3>
+      <p>
+        The agent tries to run a destructive command, or modifies its 15th file, or retries a failing command for the third time. The daemon catches it. Depending on severity: a warning message appears in the agent's context, the action is blocked with an explanation, or the human is asked to approve.
+      </p>
+
+      <h3>The Agent Asks for Guidance</h3>
+      <p>
+        At any point, the agent can call MCP tools: check an action before attempting it, read past memories for context, or ask what failure scenarios are relevant.
+      </p>
+
+      <h3>Closing the Project</h3>
+      <p>
+        The editor fires the stop event. The daemon writes a session checkpoint and shuts down. Socket files and PID files are cleaned up. If the editor crashes instead, the 5-minute timeout handles cleanup automatically.
+      </p>
+    </section>
+
+    <!-- Section: Isolation -->
+    <section>
+      <span class="section-anchor" id="isolation"></span>
+      <h2>Per-Project Isolation</h2>
+
+      <p>
+        Each editor window gets its own daemon. If you have two projects open, say a web app and a data pipeline, each has its own governance process with its own risk assessment, its own session history, and its own enforcement rules.
+      </p>
+
+      <p>
+        This works by creating a unique identifier from the project directory. The identifier determines the names of all temporary files (socket, process ID, state) used by that session. Two projects in different directories will never interfere with each other.
+      </p>
+    </section>
+
+    <!-- Section: Fail Open -->
+    <section>
+      <span class="section-anchor" id="fail-open"></span>
+      <h2>The Safety Philosophy: Fail Open</h2>
+
+      <p>
+        Viveka follows a "fail-open" design. If anything goes wrong with the governance infrastructure (Python is missing, the daemon crashes, the socket is unreachable), the agent is allowed to proceed. Actions are never blocked due to an infrastructure problem.
+      </p>
+
+      <p>
+        This is a deliberate choice. The alternative, failing closed (blocking everything when governance is down), would mean a crashed daemon locks up the entire editor. That is worse than no governance at all.
+      </p>
+
+      <p>
+        When enforcement is unavailable, the cognitive layer continues to operate. The agent still follows the six-stage workflow, still applies decision gates, still escalates on irreversible actions. It does so based on training and instruction, not a deterministic gate. The reasoning posture is always present. The deterministic enforcement is the stronger guarantee layered on top.
+      </p>
+    </section>
+
+    <!-- Section: Boundaries -->
+    <section>
+      <span class="section-anchor" id="boundaries"></span>
+      <h2>What Viveka Does Not Do</h2>
+
+      <p>
+        Five deliberate exclusions define Viveka's boundary as clearly as its seven rules define its interior.
+      </p>
+
+      <ul>
+        <li><strong>No AI calls.</strong> Every enforcement decision is pure rule evaluation. No tokens consumed, no API calls, no latency from model inference.</li>
+        <li><strong>No network access.</strong> Everything runs locally. No data leaves the machine.</li>
+        <li><strong>No accounts or API keys.</strong> Nothing to configure, nothing to pay for.</li>
+        <li><strong>No mandatory blocking.</strong> The system is advisory-first. Hard blocks fire only for clear safety violations: force-pushing to main, retry loops, budget exhaustion.</li>
+        <li><strong>No post-hoc enforcement.</strong> The after-file-edit hook records what was changed. It does not undo or reject edits after the fact. All blocking happens before the action executes.</li>
+      </ul>
+    </section>
+
+    <hr>
+
+    <!-- Section: Summary -->
+    <section>
+      <span class="section-anchor" id="summary"></span>
+      <h2>Summary</h2>
+
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Component</th>
+              <th>Role</th>
+              <th>Automatic?</th>
+              <th>What if It Fails?</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Hooks</td>
+              <td>Checkpoint: intercepts every action and sends it for evaluation</td>
+              <td>Yes, always fires</td>
+              <td>Falls open, action proceeds</td>
+            </tr>
+            <tr>
+              <td>Daemon</td>
+              <td>Decision maker: evaluates actions against seven rules, tracks session behaviour</td>
+              <td>Yes, runs in background</td>
+              <td>Falls open, hook attempts one restart, then allows</td>
+            </tr>
+            <tr>
+              <td>MCP Server</td>
+              <td>Advisor: provides tools the agent can voluntarily call for guidance</td>
+              <td>No, agent chooses to call</td>
+              <td>Falls back to standalone evaluation, then allows</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p>
+        The hooks are the hands. The daemon is the brain. The MCP server is the voice.
+      </p>
+
+      <p>
+        What makes this arrangement interesting is not the individual components. Any governance system can intercept actions, evaluate rules, and provide advisory tools. What matters is the relationship between the three layers: a mandatory checkpoint that never blocks on its own behalf, a stateful evaluator that accumulates context over the session's lifetime, and a voluntary interface that lets the agent participate in its own governance. The mandatory layer catches what must be caught. The stateful layer catches what only patterns reveal. The voluntary layer catches what only the agent knows to ask.
+      </p>
+
+      <p>
+        Together, they create a governance surface that is fast enough to be invisible, strict enough to catch real problems, and graceful enough to never become the problem itself.
+      </p>
+    </section>
+
+    <footer class="doc-footer">
+      Viveka &middot; Agent Governance Framework
+    </footer>
+
+  </main>
+</div>
+
+<!-- Active TOC highlighting -->
+<script>
+  (function() {
+    const links = document.querySelectorAll('.sidebar nav a');
+    const sections = [];
+
+    links.forEach(link => {
+      const id = link.getAttribute('href').slice(1);
+      const el = document.getElementById(id);
+      if (el) sections.push({ id, el, link });
+    });
+
+    function onScroll() {
+      const scrollY = window.scrollY + 100;
+      let current = sections[0];
+
+      for (const s of sections) {
+        if (s.el.offsetTop <= scrollY) current = s;
+      }
+
+      links.forEach(l => l.classList.remove('active'));
+      if (current) current.link.classList.add('active');
+    }
+
+    window.addEventListener('scroll', onScroll, { passive: true });
+    onScroll();
+  })();
+</script>
+
+</body>
+</html>
