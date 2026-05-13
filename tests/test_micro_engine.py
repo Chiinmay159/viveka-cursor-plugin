@@ -847,6 +847,37 @@ class TestPerformance:
         assert elapsed_us < 1000, f"Worst-case evaluation took {elapsed_us:.0f}µs (limit: 1000µs)"
 
 
+    def test_1000_evaluations_sustained_under_1ms(self, make_engine):
+        """1000-iteration sustained benchmark: average eval must stay under 1ms."""
+        engine = make_engine(risk_mode=RiskMode.STANDARD)
+
+        actions = [
+            'edit file.py',
+            'delete temp.log',
+            'run tests',
+            'read config.yaml',
+            'write output.json',
+            'refactor auth module',
+            'deploy to staging',
+            'rollback migration',
+            'install dependency',
+            'update schema',
+        ]
+
+        # Warmup
+        engine.evaluate('warmup action')
+
+        total_start = time.perf_counter()
+        for i in range(1000):
+            engine.evaluate(actions[i % len(actions)])
+        total_elapsed = time.perf_counter() - total_start
+
+        avg_us = (total_elapsed / 1000) * 1_000_000
+        assert avg_us < 1000, (
+            f"Average evaluation took {avg_us:.0f}µs over 1000 iterations (limit: 1000µs)"
+        )
+
+
 # ═══════════════════════════════════════════════════════════
 # MACRO STRATEGY INTEGRATION
 # ═══════════════════════════════════════════════════════════
