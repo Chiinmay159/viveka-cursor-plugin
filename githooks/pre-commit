@@ -1,0 +1,65 @@
+#!/usr/bin/env bash
+# Viveka git hook: pre-commit
+# Checks staged file count against the active policy's limit.
+# Warns at 80% of the limit, blocks at the limit.
+#
+# Reads the policy from .viveka/policy.yaml if present.
+# Falls back to a default limit of 15 files (standard mode).
+#
+# Also checks for common secret patterns in staged files.
+#
+# Install: cp githooks/pre-commit .git/hooks/pre-commit
+#     or:  git config core.hooksPath githooks
+
+set -euo pipefail
+
+DEFAULT_FILE_LIMIT=15
+
+# --- Read policy file limit if available ---
+
+file_limit=$DEFAULT_FILE_LIMIT
+
+if [ -f ".viveka/policy.yaml" ]; then
+    # Simple YAML extraction — no dependency on yq/python
+    policy_limit=$(grep -E '^\s*max_files_modified\s*:' .viveka/policy.yaml 2>/dev/null \
+        | head -1 | sed 's/.*:\s*//' | tr -d '[:space:]')
+    if [ -n "$policy_limit" ] && [ "$policy_limit" -gt 0 ] 2>/dev/null; then
+        file_limit=$policy_limit
+    fi
+fi
+
+# --- Check staged file count ---
+
+staged_count=$(git diff --cached --name-only | wc -l | tr -d '[:space:]')
+
+if [ "$staged_count" -gt "$file_limit" ]; then
+    echo ""
+    echo "[viveka] BLOCKED: committing $staged_count files (limit: $file_limit)."
+    echo "         This exceeds the governance file limit for this project."
+    echo "         Split into smaller commits, or bypass with: git commit --no-verify"
+    echo ""
+    exit 1
+fi
+
+warn_threshold=$(( file_limit * 80 / 100 ))
+if [ "$staged_count" -gt "$warn_threshold" ]; then
+    echo "[viveka] Warning: committing $staged_count files (limit: $file_limit)."
+fi
+
+# --- Check for secrets in staged files ---
+
+SECRET_PATTERNS='(API_KEY|SECRET_KEY|PRIVATE_KEY|api_key|secret_key|private_key)=.+'
+
+secrets_found=$(git diff --cached -U0 --diff-filter=AM \
+    | grep -E '^\+' \
+    | grep -v '^\+\+\+' \
+    | grep -cE "$SECRET_PATTERNS" 2>/dev/null || true)
+
+if [ "$secrets_found" -gt 0 ]; then
+    echo ""
+    echo "[viveka] Warning: $secrets_found line(s) in staged changes match secret patterns."
+    echo "         Review staged diffs for accidental credential exposure."
+    echo ""
+fi
+
+exit 0

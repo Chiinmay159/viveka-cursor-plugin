@@ -17,7 +17,7 @@ Every action gets one of four verdicts:
 
 | Problem | How | When |
 |---------|-----|------|
-| Force-push to main/production | Git branch detection | Always blocked |
+| Force-push to main/production | Git branch detection + git pre-push hook | Always blocked (any tool, any IDE) |
 | `rm -rf`, `drop table`, `reset --hard` | Destructive command patterns | Blocked in guarded/restricted mode |
 | Agent retrying the same failing command | Per-action retry counter | Blocked after 3 attempts (configurable) |
 | Scope creep (editing 20 files for a "fix one bug" task) | File-modified counter | Warned at limit, blocked at overshoot |
@@ -33,6 +33,7 @@ Every action gets one of four verdicts:
 | Skills | 12 | On-demand depth: context mapping, architecture, code, research, review, etc. |
 | Sub-agents | 4 | Isolated execution: code, research, doc-review, adversarial |
 | Hook events | 5 | preToolUse, beforeShellExecution, afterFileEdit, sessionStart, stop |
+| Git hooks | 2 | pre-push (branch protection), pre-commit (file count + secret detection) |
 | MCP tools | 10 | Action checks, memory, session state, posture, constraints, scenarios, policies, trace |
 | Policy packs | 5 | Pre-built governance for hotfixes, refactors, migrations, incidents, cleanup |
 
@@ -55,6 +56,15 @@ pip install pydantic
 
 If Python 3.10+ and pydantic are available, hooks and MCP tools activate automatically on next session start. Verify: Cmd+Shift+P → "MCP: List Tools" → look for `viveka`.
 
+### Git hooks (recommended, any project)
+
+```bash
+cd your-project
+git config core.hooksPath /path/to/viveka/githooks
+```
+
+Or copy individually: `cp /path/to/viveka/githooks/pre-* .git/hooks/`. This adds branch protection and file-count limits that work outside Cursor.
+
 ### Claude Code
 
 ```bash
@@ -72,29 +82,39 @@ Copy content from `platforms/chat/preferences.md` into Settings → User Prefere
 │  Reasoning Kernel                       │  rules/ skills/ agents/
 │  Shapes how the agent thinks            │  Prompt-based, always active
 ├─────────────────────────────────────────┤
-│  Enforcement (Hooks → Daemon)           │  hooks/ scripts/ → runtime/
-│  Gates every action before execution    │  Deterministic, 16ms round-trip
+│  Mandatory Enforcement                  │  hooks/ scripts/ githooks/
+│  Gates every action — agent can't       │  IDE hooks + git hooks
+│  opt out                                │  16ms round-trip
 ├─────────────────────────────────────────┤
-│  Decision Tools (MCP Server)            │  mcp-server/ → runtime/
-│  Agent-callable governance tools        │  10 tools, all local, all free
+│  Optional Tools (MCP)                   │  mcp-server/ → runtime/
+│  Agent calls when it wants guidance     │  10 tools, all local, all free
 ├─────────────────────────────────────────┤
 │  Cursor Platform                        │  Tool execution, context mgmt
 └─────────────────────────────────────────┘
 ```
 
-### Enforcement: Hooks + Daemon
+### Mandatory Enforcement
 
-Cursor fires a hook on every tool call, shell command, and file edit. The hook sends the event to a persistent background daemon over a Unix socket. The daemon holds the decision engine warm in memory — one-time startup cost, then ~0.01ms per evaluation.
+Two enforcement layers, both automatic. The agent cannot opt out of either.
+
+**IDE hooks (Cursor).** Cursor fires a hook on every tool call, shell command, and file edit. The hook sends the event to a persistent background daemon over a Unix socket. The daemon holds the decision engine warm in memory — one-time startup cost, then ~0.01ms per evaluation.
 
 The daemon computes a risk mode from the environment (branch, dirty state, available tools) and task context (intent, reversibility, urgency). Four modes: permissive, standard, guarded, restricted. Each mode sets limits on retries, file count, and action count.
 
 Each Cursor window gets its own daemon, keyed by working directory. Two projects open in parallel never share state.
 
-Hooks fail-open: if the daemon is unreachable, actions proceed. The reasoning kernel continues to guide the agent.
+IDE hooks fail-open: if the daemon is unreachable, actions proceed. The reasoning kernel continues to guide the agent.
 
-### Decision Tools: MCP Server
+**Git hooks (any tool).** Two git-layer hooks enforce rules regardless of what initiated the operation — Cursor, CLI, VS Code, CI, or manual terminal use:
 
-Ten tools the agent can call voluntarily:
+- `pre-push` — blocks force-pushes to protected branches (main, master, production, release). Same branch set as the IDE enforcement.
+- `pre-commit` — checks staged file count against the active policy's limit. Warns at 80%, blocks at the limit. Also scans staged diffs for common secret patterns (API_KEY, SECRET_KEY, PRIVATE_KEY).
+
+Install: `git config core.hooksPath githooks` or copy from `githooks/` into `.git/hooks/`.
+
+### Optional Tools (MCP)
+
+Ten tools the agent can call voluntarily — it is not forced to use them, but they give it access to the same governance engine:
 
 | Tool | What it does |
 |------|-------------|

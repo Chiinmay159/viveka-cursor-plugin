@@ -1,0 +1,40 @@
+#!/usr/bin/env bash
+# Viveka git hook: pre-push
+# Blocks force-pushes to protected branches regardless of which tool
+# initiated the push (Cursor, CLI, VS Code, CI).
+#
+# Protected branches: main, master, production, release.
+# Same set as runtime/viveka/layers/scanner.py.
+#
+# Install: cp githooks/pre-push .git/hooks/pre-push
+#     or:  git config core.hooksPath githooks
+
+set -euo pipefail
+
+PROTECTED="main master production release"
+
+remote="$1"
+url="$2"
+
+while read -r local_ref local_oid remote_ref remote_oid; do
+    # Extract branch name from refs/heads/branch-name
+    branch="${remote_ref#refs/heads/}"
+
+    for protected in $PROTECTED; do
+        if [ "$branch" = "$protected" ]; then
+            # Detect force-push: check if local history contains remote HEAD.
+            # If remote_oid is not an ancestor of local_oid, this is a rewrite.
+            if [ "$remote_oid" != "0000000000000000000000000000000000000000" ] && \
+               ! git merge-base --is-ancestor "$remote_oid" "$local_oid" 2>/dev/null; then
+                echo ""
+                echo "[viveka] BLOCKED: force-push to protected branch '$branch'."
+                echo "         This rewrites history on $branch, which is irreversible."
+                echo "         If you really need this, bypass with: git push --no-verify"
+                echo ""
+                exit 1
+            fi
+        fi
+    done
+done
+
+exit 0

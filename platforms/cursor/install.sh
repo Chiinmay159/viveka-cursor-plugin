@@ -32,7 +32,25 @@ done
 
 mkdir -p "$PROJECT_DIR/.viveka/memory"
 echo "  ✓ .viveka/memory/"
+
+# Install git hooks (extends enforcement beyond IDE)
+if [ -d "$PROJECT_DIR/.git" ]; then
+    mkdir -p "$PROJECT_DIR/.git/hooks"
+    for hook in pre-push pre-commit; do
+        if [ -f "$VIVEKA_ROOT/githooks/$hook" ]; then
+            if [ -f "$PROJECT_DIR/.git/hooks/$hook" ] && ! grep -q "viveka" "$PROJECT_DIR/.git/hooks/$hook"; then
+                echo "  ⚠ .git/hooks/$hook already exists (not Viveka). Skipping."
+            else
+                cp "$VIVEKA_ROOT/githooks/$hook" "$PROJECT_DIR/.git/hooks/$hook"
+                chmod +x "$PROJECT_DIR/.git/hooks/$hook"
+                echo "  ✓ .git/hooks/$hook"
+            fi
+        fi
+    done
+fi
+
 echo ""
 echo "Done. Viveka is active in Cursor."
 echo "  Kernel loads automatically (~1.1K tokens)."
 echo "  Skills load on demand via /viveka-<name> (~11K tokens available)."
+echo "  Git hooks enforce branch protection and file limits outside the IDE."
