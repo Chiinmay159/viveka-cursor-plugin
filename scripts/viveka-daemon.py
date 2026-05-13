@@ -243,6 +243,106 @@ class Daemon:
         except ImportError:
             return {"scenarios": [], "error": "scenarios module not available"}
 
+    def _distill_learnings(self, summary: dict) -> list[str]:
+        """Extract correction rules from the governance trace.
+
+        Deterministic — no LLM calls. Reads the session's own behavioral
+        record and produces actionable learnings. This closes the trust
+        boundary: the daemon observed these events directly, the agent
+        cannot omit or rewrite them.
+        """
+        learnings = []
+
+        # Retry patterns that hit the limit → failed approaches
+        for pattern, count in summary.get("retry_patterns", {}).items():
+            max_retries = self._limits.get("max_retries", 3) if hasattr(self, '_limits') else 3
+            if count >= max_retries:
+                learnings.append(
+                    f"Approach failed: '{pattern}' was retried {count} times "
+                    f"and hit the retry limit. Avoid this pattern next session."
+                )
+
+        # Blocks that fired → hard constraints the agent hit
+        if self.session:
+            blocked_actions = [
+                a for a in self.session.actions
+                if a.verdict.value == "block"
+            ]
+            # Deduplicate by rule
+            seen_rules = set()
+            for action in blocked_actions:
+                if action.rule not in seen_rules:
+                    seen_rules.add(action.rule)
+                    learnings.append(
+                        f"Action blocked by {action.rule}: {action.reason}. "
+                        f"Action was: '{action.action}'."
+                    )
+
+        # Scope creep signal
+        files_modified = summary.get("files_modified", 0)
+        max_files = self.engine._limits.get("max_files_modified", 15) if self.engine else 15
+        if files_modified > max_files * 0.8:
+            learnings.append(
+                f"Scope creep: {files_modified} files modified "
+                f"(limit: {max_files}). Break large changes into "
+                f"smaller, focused commits next time."
+            )
+
+        # Warning accumulation signal
+        warnings = summary.get("warnings", 0)
+        if warnings >= 5:
+            learnings.append(
+                f"Session accumulated {warnings} governance warnings. "
+                f"Review the checkpoint trace to identify recurring issues."
+            )
+
+        # Escalation signal
+        if self.session and self.session.escalation_count > 0:
+            learnings.append(
+                f"{self.session.escalation_count} action(s) escalated to "
+                f"human during this session. Consider tightening the "
+                f"approach or switching posture for similar tasks."
+            )
+
+        return learnings
+
+    def _write_auto_memory(self, learnings: list[str], now: datetime):
+        """Write daemon-distilled learnings to .viveka/memory/.
+
+        These entries are tagged 'generated: daemon' to distinguish them
+        from agent-written memories. They cannot be omitted or rewritten
+        by the agent — the daemon observed the events directly.
+        """
+        memory_dir = Path(self.cwd) / ".viveka" / "memory"
+        try:
+            memory_dir.mkdir(parents=True, exist_ok=True)
+        except OSError:
+            return
+
+        slug = f"session-{now.strftime('%H%M%S')}"
+        filename = f"{now.strftime('%Y-%m-%d')}-{slug}.md"
+
+        lines = [
+            f"# Session learnings — {now.strftime('%Y-%m-%d %H:%M')}",
+            "",
+            f"**Task:** {self.task}",
+            f"**Posture:** {self.posture}",
+            f"**Enforcement mode:** {self.engine.risk_mode.value}",
+            f"**Source:** daemon (auto-distilled from governance trace)",
+            "",
+            "## Correction rules",
+            "",
+        ]
+        for i, learning in enumerate(learnings, 1):
+            lines.append(f"{i}. {learning}")
+
+        lines.append("")
+
+        try:
+            (memory_dir / filename).write_text("\n".join(lines))
+        except OSError:
+            pass
+
     def write_session_checkpoint(self):
         """Write a session trace to .viveka/checkpoints/ on shutdown."""
         if not self.engine:
@@ -277,6 +377,13 @@ class Daemon:
             (checkpoint_dir / filename).write_text(json.dumps(checkpoint, indent=2))
         except OSError:
             pass
+
+        # Auto-distill learnings from the trace — closes the trust boundary.
+        # The agent can still write its own memories via viveka_memory_write,
+        # but these daemon-generated entries exist regardless.
+        learnings = self._distill_learnings(summary)
+        if learnings:
+            self._write_auto_memory(learnings, now)
 
     def evaluate(self, action: str) -> dict:
         """Evaluate an action. Returns Cursor hook response."""
